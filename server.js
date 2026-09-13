@@ -986,13 +986,7 @@ const CASE_ITEMS = [
     category: 'Restricted',
     rarity: 'restricted',
     rarityColor: '#8847ff',
-    reward: 0,
-    inventoryItem: {
-      id: 'magical-leaf',
-      name: 'Magical Leaf',
-      category: 'Consumables',
-      price: 50
-    },
+    reward: 50,
     weight: 18,
     icon: '🍃',
     image: '/assets/magicleaf.webp'
@@ -1053,8 +1047,8 @@ const CASE_ITEMS = [
     icon: '🌟',
     image: '/assets/special_gold.webp',
     bundleItem: {
-      id: 'tester_mega_bundle',
-      name: 'Tester Mega Bundle',
+      id: 'bundle_of_choice',
+      name: 'bundle of choice',
       category: 'Bundle',
       price: 1000
     }
@@ -1120,7 +1114,7 @@ async function handleCaseOpening(req, res) {
       db.updateBalance(user.discord_id, winner.reward);
     }
 
-    // If winner grants an item directly into user inventory (e.g. Trait Reroll, Magical Leaf):
+    // If winner grants an item directly into user inventory (e.g. Trait Reroll):
     let itemAwarded = null;
     if (winner.inventoryItem) {
       try {
@@ -1151,8 +1145,8 @@ async function handleCaseOpening(req, res) {
     let bundleAwarded = null;
     if (winner.rarity === 'gold') {
       const bundle = winner.bundleItem || {
-        id: 'tester_mega_bundle',
-        name: 'Tester Mega Bundle',
+        id: 'bundle_of_choice',
+        name: 'bundle of choice',
         category: 'Bundle',
         price: 1000
       };
@@ -1204,7 +1198,7 @@ async function handleCaseOpening(req, res) {
 
     let messageText = '';
     if (winner.rarity === 'gold') {
-      messageText = `🌟 JACKPOT! You unboxed ${winner.name}! (+${winner.reward} PTS & ${bundleAwarded || 'Tester Mega Bundle'} queued to Inventory, Net: +${netChange} PTS)`;
+      messageText = `🌟 JACKPOT! You unboxed ${winner.name}! (+${winner.reward} PTS & ${bundleAwarded || 'bundle of choice'} queued to Inventory, Net: +${netChange} PTS)`;
     } else if (itemAwarded) {
       messageText = `Unboxed [${winner.category}] ${winner.name}! Added directly to your Inventory queue.`;
     } else {

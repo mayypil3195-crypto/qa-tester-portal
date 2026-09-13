@@ -1879,9 +1879,10 @@ document.addEventListener('DOMContentLoaded', () => {
           caseResultMessage.textContent = json.message;
 
           if (caseResultBundleBadge) {
-            if (json.bundleAwarded) {
+            if (json.bundleAwarded || winner.rarity === 'gold') {
+              const bName = json.bundleAwarded || 'bundle of choice';
               caseResultBundleBadge.style.display = 'inline-block';
-              caseResultBundleBadge.textContent = `🎁 ${json.bundleAwarded.toUpperCase()} QUEUED`;
+              caseResultBundleBadge.textContent = `🎁 ${bName.toUpperCase()} QUEUED`;
             } else {
               caseResultBundleBadge.style.display = 'none';
             }
