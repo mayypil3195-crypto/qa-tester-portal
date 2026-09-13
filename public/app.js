@@ -57,7 +57,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const slotBetInput = document.getElementById('slotBetInput');
   const slotStatusBanner = document.getElementById('slotStatusBanner');
   const slotPresets = document.querySelectorAll('.slot-preset');
-  const btnMaxBet = document.getElementById('btnMaxBet');
   const btnSpin = document.getElementById('btnSpin');
   const btnSpinText = document.getElementById('btnSpinText');
 
@@ -71,7 +70,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const plinkoStatusBanner = document.getElementById('plinkoStatusBanner');
   const plinkoBetInput = document.getElementById('plinkoBetInput');
   const plinkoPresets = document.querySelectorAll('.plinko-preset');
-  const btnMaxPlinkoBet = document.getElementById('btnMaxPlinkoBet');
   const btnDropBall = document.getElementById('btnDropBall');
   const btnDropBallText = document.getElementById('btnDropBallText');
 
@@ -590,22 +588,55 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ---------------- 3-REEL SLOT MACHINE ----------------
 
+  const MAX_WAGER_LIMIT = 100;
+  const MIN_WAGER_LIMIT = 1;
+
+  // Helper to enforce wager input bounds [1, 100]
+  function attachWagerLimiter(input) {
+    if (!input) return;
+    input.addEventListener('input', () => {
+      if (input.value === '') return;
+      let val = parseInt(input.value, 10);
+      if (isNaN(val)) return;
+      if (val > MAX_WAGER_LIMIT) {
+        input.value = MAX_WAGER_LIMIT;
+      } else if (val < MIN_WAGER_LIMIT && input.value.length > 0 && input.value !== '-') {
+        input.value = MIN_WAGER_LIMIT;
+      }
+    });
+
+    input.addEventListener('change', () => {
+      let val = parseInt(input.value, 10);
+      if (isNaN(val) || val < MIN_WAGER_LIMIT) {
+        input.value = MIN_WAGER_LIMIT;
+      } else if (val > MAX_WAGER_LIMIT) {
+        input.value = MAX_WAGER_LIMIT;
+      }
+    });
+
+    input.addEventListener('blur', () => {
+      let val = parseInt(input.value, 10);
+      if (isNaN(val) || val < MIN_WAGER_LIMIT) {
+        input.value = MIN_WAGER_LIMIT;
+      } else if (val > MAX_WAGER_LIMIT) {
+        input.value = MAX_WAGER_LIMIT;
+      }
+    });
+  }
+
+  attachWagerLimiter(slotBetInput);
+  attachWagerLimiter(plinkoBetInput);
+
   const SLOT_SYMBOLS = ['🍒', '🍋', '🍇', '🔔', '💎', '7️⃣'];
 
   slotPresets.forEach(preset => {
     preset.addEventListener('click', () => {
       const betVal = parseInt(preset.getAttribute('data-bet'), 10);
       if (!isNaN(betVal) && slotBetInput) {
-        slotBetInput.value = betVal;
+        slotBetInput.value = Math.min(MAX_WAGER_LIMIT, Math.max(MIN_WAGER_LIMIT, betVal));
       }
     });
   });
-
-  if (btnMaxBet && slotBetInput) {
-    btnMaxBet.addEventListener('click', () => {
-      slotBetInput.value = currentUser ? Math.max(1, currentUser.balance_pts) : 10;
-    });
-  }
 
   let isSpinning = false;
   if (btnSpin) {
@@ -613,8 +644,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isSpinning) return;
       const bet = parseInt(slotBetInput.value, 10);
 
-      if (isNaN(bet) || bet <= 0) {
-        showToast('error', 'Please enter a valid bet amount.');
+      if (isNaN(bet) || bet < MIN_WAGER_LIMIT || bet > MAX_WAGER_LIMIT) {
+        showToast('error', `Wager must be between ${MIN_WAGER_LIMIT} and ${MAX_WAGER_LIMIT} PTS.`);
         return;
       }
 
@@ -753,16 +784,10 @@ document.addEventListener('DOMContentLoaded', () => {
     preset.addEventListener('click', () => {
       const betVal = parseInt(preset.getAttribute('data-bet'), 10);
       if (!isNaN(betVal) && plinkoBetInput) {
-        plinkoBetInput.value = betVal;
+        plinkoBetInput.value = Math.min(MAX_WAGER_LIMIT, Math.max(MIN_WAGER_LIMIT, betVal));
       }
     });
   });
-
-  if (btnMaxPlinkoBet && plinkoBetInput) {
-    btnMaxPlinkoBet.addEventListener('click', () => {
-      plinkoBetInput.value = currentUser ? Math.max(1, currentUser.balance_pts) : 10;
-    });
-  }
 
   // Plinko Canvas Engine (11 Rows, 12 Buckets)
   const PLINKO = {
@@ -1216,8 +1241,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isPlinkoDropping) return;
       const bet = parseInt(plinkoBetInput.value, 10);
 
-      if (isNaN(bet) || bet <= 0) {
-        showToast('error', 'Please enter a valid bet amount.');
+      if (isNaN(bet) || bet < MIN_WAGER_LIMIT || bet > MAX_WAGER_LIMIT) {
+        showToast('error', `Wager must be between ${MIN_WAGER_LIMIT} and ${MAX_WAGER_LIMIT} PTS.`);
         return;
       }
 

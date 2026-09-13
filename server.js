@@ -15,6 +15,10 @@ const LEAD_ROLE_ID = (process.env.LEAD_ROLE_ID || process.env.LEAD_TESTER_ROLE_I
 // In-memory cache for Discord member roles to mitigate API rate limits (5-min TTL)
 const memberRoleCache = new Map();
 
+// Centralized Casino Wager Limits
+const MAX_CASINO_WAGER = parseInt(process.env.MAX_CASINO_WAGER || '100', 10);
+const MIN_CASINO_WAGER = 1;
+
 // Trust reverse proxy (Railway, Heroku, etc.)
 app.set('trust proxy', 1);
 
@@ -247,30 +251,20 @@ async function sendLogWebhook(payload) {
 }
 
 /**
- * Logs notable casino outcomes to avoid rate-limiting:
- * 1. Big Win: multiplier >= 5 or netChange >= 100 (Title: 🎰 Casino Big Win!, Color: Gold 0xFEE75C)
- * 2. High-Roller Play: bet >= 50 (Title: 🎲 Casino Roll, Color: Green 0x57F287 on win, Charcoal 0x2F3136 on loss)
+ * Logs notable high-multiplier casino wins to avoid spam and rate-limiting.
+ * Suppresses all ordinary losses and low-tier payouts.
+ * Only fires if the outcome is a high multiplier win (multiplier >= 3 and netChange > 0).
  */
 async function logCasinoActivity({ user, game, bet, multiplier, payout, netChange, newBalance }) {
-  const isBigWin = (multiplier >= 5 || netChange >= 100);
-  const isHighRoller = (bet >= 50);
-
-  if (!isBigWin && !isHighRoller) {
+  // Suppress loss spam: strictly multiplier >= 3 and positive net payout
+  if (!multiplier || multiplier < 3 || (netChange !== undefined && netChange <= 0)) {
     return;
   }
 
-  let title;
-  let color;
+  const isJackpot = (multiplier >= 10);
+  const title = isJackpot ? '🎰 Casino Jackpot Win!' : '🎰 Casino Big Win!';
+  const color = 0xFEE75C; // Gold
 
-  if (isBigWin) {
-    title = '🎰 Casino Big Win!';
-    color = 0xFEE75C; // Gold
-  } else {
-    title = '🎲 Casino Roll';
-    color = netChange >= 0 ? 0x57F287 : 0x2F3136; // Green on win, Charcoal on loss
-  }
-
-  const sign = netChange >= 0 ? '+' : '';
   const embed = {
     title,
     color,
@@ -297,7 +291,7 @@ async function logCasinoActivity({ user, game, bet, multiplier, payout, netChang
       },
       {
         name: 'Net',
-        value: `${sign}${netChange} PTS`,
+        value: `+${netChange} PTS`,
         inline: true
       },
       {
@@ -661,13 +655,17 @@ app.get('/api/me', async (req, res) => {
  */
 app.post('/api/casino/spin', requireAuth, (req, res) => {
   try {
-    const { bet } = req.body;
-    const betAmount = parseInt(bet, 10);
+    const rawWager = req.body.wager !== undefined ? req.body.wager : req.body.bet;
+    const wager = parseInt(rawWager, 10);
 
-    if (isNaN(betAmount) || betAmount <= 0) {
-      return res.status(400).json({ success: false, error: 'Bet must be a positive integer.' });
+    if (isNaN(wager) || wager < MIN_CASINO_WAGER || wager > MAX_CASINO_WAGER) {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Wager must be between ${MIN_CASINO_WAGER} and ${MAX_CASINO_WAGER} PTS.` 
+      });
     }
 
+    const betAmount = wager;
     const user = db.getUser(req.session.user.id);
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found.' });
@@ -783,11 +781,17 @@ app.post('/api/casino/coinflip', requireAuth, (req, res) => {
       return res.status(400).json({ success: false, error: 'Side must be either "heads" or "tails".' });
     }
 
-    const betAmount = parseInt(bet, 10);
-    if (isNaN(betAmount) || betAmount <= 0) {
-      return res.status(400).json({ success: false, error: 'Bet must be a positive integer.' });
+    const rawWager = req.body.wager !== undefined ? req.body.wager : req.body.bet;
+    const wager = parseInt(rawWager, 10);
+
+    if (isNaN(wager) || wager < MIN_CASINO_WAGER || wager > MAX_CASINO_WAGER) {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Wager must be between ${MIN_CASINO_WAGER} and ${MAX_CASINO_WAGER} PTS.` 
+      });
     }
 
+    const betAmount = wager;
     const user = db.getUser(req.session.user.id);
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found.' });
@@ -824,13 +828,17 @@ app.post('/api/casino/coinflip', requireAuth, (req, res) => {
  */
 app.post('/api/casino/plinko', requireAuth, (req, res) => {
   try {
-    const { bet } = req.body;
-    const betAmount = parseInt(bet, 10);
+    const rawWager = req.body.wager !== undefined ? req.body.wager : req.body.bet;
+    const wager = parseInt(rawWager, 10);
 
-    if (isNaN(betAmount) || betAmount <= 0) {
-      return res.status(400).json({ success: false, error: 'Bet must be a positive integer.' });
+    if (isNaN(wager) || wager < MIN_CASINO_WAGER || wager > MAX_CASINO_WAGER) {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Wager must be between ${MIN_CASINO_WAGER} and ${MAX_CASINO_WAGER} PTS.` 
+      });
     }
 
+    const betAmount = wager;
     const user = db.getUser(req.session.user.id);
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found.' });
@@ -1808,5 +1816,7 @@ module.exports = {
   dispatchDiscordWebhook,
   checkDiscordMemberHasLeadRole,
   LEAD_ROLE_ID,
-  memberRoleCache
+  memberRoleCache,
+  MAX_CASINO_WAGER,
+  MIN_CASINO_WAGER
 };
