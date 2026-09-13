@@ -481,10 +481,24 @@ body {
   border-radius: 4px;
 }
 
-.optional-label {
+.form-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.label-badge.optional, .optional-label {
   color: var(--text-muted);
   font-weight: 400;
   font-size: 0.76rem;
+}
+
+.form-links-area {
+  min-height: 72px;
+  font-family: inherit;
+  font-size: 0.86rem;
+  line-height: 1.45;
 }
 
 .form-input, .form-textarea {
@@ -1545,6 +1559,35 @@ body {
 
 .proof-link:hover {
   text-decoration: underline;
+}
+
+.proof-pills-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-width: 220px;
+}
+
+.proof-pill {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(88, 101, 242, 0.12);
+  border: 1px solid rgba(88, 101, 242, 0.35);
+  color: #7986ff;
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: all var(--transition);
+}
+
+.proof-pill:hover {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
+  transform: translateY(-1px);
 }
 
 .status-pill {

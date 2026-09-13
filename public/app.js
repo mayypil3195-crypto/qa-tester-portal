@@ -40,7 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const submitDiscordId = document.getElementById('submitDiscordId');
   const pointsInput = document.getElementById('points');
   const descriptionInput = document.getElementById('description');
-  const proofUrlInput = document.getElementById('proof_url');
+  const proofInput = document.getElementById('proofInput') || document.getElementById('proof_url');
   const submitBtn = document.getElementById('submitBtn');
   const btnText = document.getElementById('btnText');
   const submitAlertBanner = document.getElementById('submitAlertBanner');
@@ -257,7 +257,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const points = parseInt(pointsInput.value, 10);
     const description = descriptionInput.value.trim();
-    const proof_url = proofUrlInput.value.trim();
+    const proof_url = proofInput ? proofInput.value.trim() : '';
 
     if (isNaN(points) || points < 1 || points > 1000) {
       submitAlertBanner.className = 'alert-banner error';
@@ -280,7 +280,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/request-points', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ points, description, proof_url: proof_url || null })
+        body: JSON.stringify({ 
+          points, 
+          description, 
+          proof_url: proof_url || null,
+          proofLink: proof_url || null 
+        })
       });
 
       const json = await res.json();
@@ -294,7 +299,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Reset form inputs (keep locked user credentials)
         pointsInput.value = '10';
         descriptionInput.value = '';
-        proofUrlInput.value = '';
+        if (proofInput) proofInput.value = '';
       } else {
         submitAlertBanner.className = 'alert-banner error';
         submitAlertBanner.textContent = json.message || json.error || 'Failed to submit report.';
@@ -1325,9 +1330,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     adminSubmissionsTbody.innerHTML = list.map(sub => {
-      const proofHtml = sub.proof_url
-        ? `<a href="${sub.proof_url}" target="_blank" rel="noopener noreferrer" class="proof-link">View Proof</a>`
-        : '<span style="color: var(--text-muted); font-size: 0.8rem;">None</span>';
+      let proofHtml = '<span style="color: var(--text-muted); font-size: 0.8rem;">None</span>';
+      if (sub.proof_url) {
+        const urls = String(sub.proof_url)
+          .split(/[\r\n,]+/)
+          .map(u => u.trim())
+          .filter(u => u.length > 0 && (u.startsWith('http://') || u.startsWith('https://')));
+
+        if (urls.length === 1) {
+          proofHtml = `<a href="${urls[0]}" target="_blank" rel="noopener noreferrer" class="proof-pill">Proof Link</a>`;
+        } else if (urls.length > 1) {
+          proofHtml = `
+            <div class="proof-pills-wrap">
+              ${urls.map((url, idx) => `
+                <a href="${url}" target="_blank" rel="noopener noreferrer" class="proof-pill" title="${url}">Proof ${idx + 1}</a>
+              `).join('')}
+            </div>
+          `;
+        }
+      }
 
       const statusClass = `status-${sub.status.toLowerCase()}`;
       const isPending = sub.status === 'PENDING';

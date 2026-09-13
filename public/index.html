@@ -168,8 +168,17 @@
             </div>
 
             <div class="form-group">
-              <label for="proof_url" class="form-label">Proof Link <span class="optional-label">(optional)</span></label>
-              <input type="url" id="proof_url" name="proof_url" class="form-input" placeholder="https://..." autocomplete="off">
+              <div class="form-label-row">
+                <label for="proofInput" class="form-label">Proof Links</label>
+                <span class="label-badge optional">(optional, one per line)</span>
+              </div>
+              <textarea 
+                id="proofInput" 
+                name="proofInput"
+                rows="3" 
+                placeholder="https://medal.tv/...&#10;https://streamable.com/...&#10;https://imgur.com/..."
+                class="form-textarea form-links-area"
+              ></textarea>
             </div>
 
             <button type="submit" id="submitBtn" class="btn-primary">
@@ -519,7 +528,7 @@
                     <th style="min-width: 170px;">Tester</th>
                     <th style="width: 90px;">Points</th>
                     <th style="min-width: 250px;">Report Details</th>
-                    <th style="width: 90px;">Proof</th>
+                    <th style="min-width: 110px;">Proof</th>
                     <th style="width: 110px;">Status</th>
                     <th style="min-width: 180px; text-align: right;">Review Actions</th>
                   </tr>

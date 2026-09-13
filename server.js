@@ -90,9 +90,23 @@ async function dispatchDiscordWebhook(data, id) {
     ? description.substring(0, 1017) + '...' 
     : description;
 
-  const proofFieldContent = proof_url && isValidHttpUrl(proof_url)
-    ? `[Link](${proof_url})`
-    : 'None provided';
+  let proofFieldContent = 'None';
+  if (proof_url) {
+    const urls = String(proof_url)
+      .split(/[\r\n,]+/)
+      .map(u => u.trim())
+      .filter(u => u.length > 0 && isValidHttpUrl(u));
+
+    if (urls.length === 1) {
+      proofFieldContent = `[Proof Link](${urls[0]})`;
+    } else if (urls.length > 1) {
+      proofFieldContent = urls.map((url, idx) => `[Proof ${idx + 1}](${url})`).join(' • ');
+    }
+  }
+
+  if (proofFieldContent.length > 1020) {
+    proofFieldContent = proofFieldContent.substring(0, 1017) + '...';
+  }
 
   const embed = {
     title: `📋 QA Points Request #${id}`,
@@ -1137,7 +1151,7 @@ app.get('/api/leaderboard', (req, res) => {
  */
 app.post('/api/request-points', requireAuth, async (req, res) => {
   try {
-    const { points, description, proof_url } = req.body;
+    const { points, description, proof_url, proofLink, proof_links } = req.body;
     const sessionUser = req.session.user;
 
     const errors = [];
@@ -1155,14 +1169,22 @@ app.post('/api/request-points', requireAuth, async (req, res) => {
       errors.push('Report details are too short (minimum 5 characters).');
     }
 
-    // Proof URL validation (optional, but must be valid URL if provided)
+    // Multiple Proof URLs parsing (optional)
+    const rawProof = proof_url !== undefined ? proof_url : (proofLink !== undefined ? proofLink : proof_links);
     let sanitizedProofUrl = null;
-    if (proof_url && typeof proof_url === 'string' && proof_url.trim().length > 0) {
-      const trimmedUrl = proof_url.trim();
-      if (!isValidHttpUrl(trimmedUrl)) {
-        errors.push('Proof link must be a valid HTTP or HTTPS URL.');
-      } else {
-        sanitizedProofUrl = trimmedUrl;
+
+    if (rawProof) {
+      const items = Array.isArray(rawProof) ? rawProof : String(rawProof).split(/[\r\n,]+/);
+      const validUrls = [];
+      for (const item of items) {
+        const trimmed = String(item || '').trim();
+        if (!trimmed) continue;
+        if (isValidHttpUrl(trimmed)) {
+          validUrls.push(trimmed);
+        }
+      }
+      if (validUrls.length > 0) {
+        sanitizedProofUrl = validUrls.join('\n');
       }
     }
 
