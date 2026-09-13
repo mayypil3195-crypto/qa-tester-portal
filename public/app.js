@@ -85,6 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const caseResultPoints = document.getElementById('caseResultPoints');
   const caseResultTitle = document.getElementById('caseResultTitle');
   const caseResultMessage = document.getElementById('caseResultMessage');
+  const caseResultBundleBadge = document.getElementById('caseResultBundleBadge');
 
   // Shop Elements
   const shopGrid = document.getElementById('shopGrid');
@@ -1478,11 +1479,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ---------------- CS:GO / CS2 CASE OPENING ROULETTE ----------------
+  // ---------------- ASX CASE OPENER ROULETTE ----------------
   const CS_PREVIEW_POOL = [
-    { name: 'Testing Diagnostics Log', rarity: 'mil-spec', rarityColor: '#4b69ff', category: 'Mil-Spec', icon: '📋' },
-    { name: 'QA Defect Cache', rarity: 'mil-spec', rarityColor: '#4b69ff', category: 'Mil-Spec', icon: '🗃️' },
-    { name: 'Bug Hunter Ribbon', rarity: 'mil-spec', rarityColor: '#4b69ff', category: 'Mil-Spec', icon: '🎖️' },
+    { name: '10 PTS', rarity: 'mil-spec', rarityColor: '#4b69ff', category: 'Mil-Spec', icon: '🪙' },
+    { name: '15 PTS', rarity: 'mil-spec', rarityColor: '#4b69ff', category: 'Mil-Spec', icon: '🪙' },
+    { name: '25 PTS', rarity: 'mil-spec', rarityColor: '#4b69ff', category: 'Mil-Spec', icon: '🪙' },
     { name: 'Trait Reroll', rarity: 'restricted', rarityColor: '#8847ff', category: 'Restricted', image: '/assets/reroll.webp' },
     { name: 'Stat Crystal', rarity: 'classified', rarityColor: '#d32ce6', category: 'Classified', image: '/assets/stat.webp' },
     { name: 'Modifier Prism', rarity: 'classified', rarityColor: '#d32ce6', category: 'Classified', image: '/assets/modifirer.png' },
@@ -1518,26 +1519,109 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   initCasePreview();
 
+  // Shared Web Audio context & noise buffer for crisp mechanical ratchet sound
+  let caseAudioCtx = null;
+  let caseNoiseBuffer = null;
+
+  function getCaseAudioContext() {
+    if (!caseAudioCtx) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        caseAudioCtx = new AudioCtx();
+      }
+    }
+    if (caseAudioCtx && caseAudioCtx.state === 'suspended') {
+      caseAudioCtx.resume();
+    }
+    return caseAudioCtx;
+  }
+
+  function getCaseNoiseBuffer(ctx) {
+    if (!caseNoiseBuffer) {
+      const bufferSize = Math.floor(ctx.sampleRate * 0.05); // 50ms noise
+      caseNoiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const output = caseNoiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+      }
+    }
+    return caseNoiseBuffer;
+  }
+
+  /**
+   * Rotary Ratchet Reel Tick:
+   * Short high-frequency noise burst + resonant bandpass filter around 2200Hz, envelope decay 18ms.
+   */
+  function playRatchetTick(ctx, vol = 0.5) {
+    if (!ctx) return;
+    try {
+      const now = ctx.currentTime;
+
+      // 1. Noise burst
+      const noiseSource = ctx.createBufferSource();
+      noiseSource.buffer = getCaseNoiseBuffer(ctx);
+
+      // Resonant bandpass filter around 2200Hz
+      const bandpass = ctx.createBiquadFilter();
+      bandpass.type = 'bandpass';
+      bandpass.frequency.setValueAtTime(2200, now);
+      bandpass.Q.setValueAtTime(5.5, now);
+
+      // Envelope decay 18ms
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.08 * vol, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.018);
+
+      noiseSource.connect(bandpass);
+      bandpass.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+
+      noiseSource.start(now);
+      noiseSource.stop(now + 0.02);
+
+      // Subtle mechanical tooth impact (quick click)
+      const osc = ctx.createOscillator();
+      const oscGain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(1400, now);
+      osc.frequency.exponentialRampToValueAtTime(350, now + 0.012);
+      oscGain.gain.setValueAtTime(0.035 * vol, now);
+      oscGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.012);
+
+      osc.connect(oscGain);
+      oscGain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.015);
+    } catch (e) {}
+  }
+
+  /**
+   * Deceleration Ticker:
+   * Synchronized to the 5.5s cubic-bezier spin.
+   * Starts rapid (~45ms interval) and cleanly spaces out to ~650ms near the end.
+   */
   function playSpinTicker(durationMs) {
     try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
+      const ctx = getCaseAudioContext();
+      if (!ctx) return;
 
-      let startTime = performance.now();
+      const startTime = performance.now();
       let lastTick = 0;
 
       function tickLoop(now) {
         const elapsed = now - startTime;
         if (elapsed >= durationMs) return;
 
-        // Decelerate ticker frequency as spin slows down
-        const progress = elapsed / durationMs;
-        const tickInterval = 65 + Math.pow(progress, 3) * 480;
+        const progress = Math.min(1, elapsed / durationMs);
+        // Exponential deceleration curve matching cubic-bezier(0.12, 0.8, 0.2, 1)
+        const tickInterval = 45 + Math.pow(progress, 3.4) * 620;
 
         if (now - lastTick >= tickInterval) {
           lastTick = now;
-          playTickerClick(ctx, 1 - progress * 0.4);
+          // Dynamic volume slightly drops as wheel winds down
+          const dynamicVol = Math.max(0.25, 1 - progress * 0.35);
+          playRatchetTick(ctx, dynamicVol);
         }
 
         requestAnimationFrame(tickLoop);
@@ -1547,19 +1631,112 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) {}
   }
 
-  function playTickerClick(ctx, vol = 0.5) {
+  /**
+   * Subtle punchy bass thud on land (kick at 60Hz fading down)
+   */
+  function playLandThud(ctx) {
+    if (!ctx) return;
     try {
+      const now = ctx.currentTime;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(850, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.025);
-      gain.gain.setValueAtTime(0.04 * vol, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.025);
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(60, now);
+      osc.frequency.exponentialRampToValueAtTime(24, now + 0.20);
+
+      gain.gain.setValueAtTime(0.35, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
       osc.connect(gain);
       gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.025);
+
+      osc.start(now);
+      osc.stop(now + 0.25);
+    } catch (e) {}
+  }
+
+  /**
+   * Energetic ascending two-tone fanfare for Covert (Red)
+   */
+  function playCovertFanfare(ctx) {
+    if (!ctx) return;
+    try {
+      const now = ctx.currentTime;
+      const notes = [
+        { freq: 440.00, start: 0.05, dur: 0.16 }, // A4
+        { freq: 659.25, start: 0.22, dur: 0.45 }  // E5
+      ];
+
+      notes.forEach(({ freq, start, dur }) => {
+        const t = now + start;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, t);
+
+        gain.gain.setValueAtTime(0.001, t);
+        gain.gain.linearRampToValueAtTime(0.22, t + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(t);
+        osc.stop(t + dur + 0.05);
+      });
+    } catch (e) {}
+  }
+
+  /**
+   * Glorious synth chime / shimmer chord for Gold (★)
+   * Arpeggiated major triad with sine oscillators and light vibrato
+   */
+  function playGoldShimmerChord(ctx) {
+    if (!ctx) return;
+    try {
+      const now = ctx.currentTime;
+      const notes = [
+        { freq: 523.25, delay: 0.00 }, // C5
+        { freq: 659.25, delay: 0.09 }, // E5
+        { freq: 783.99, delay: 0.18 }, // G5
+        { freq: 1046.50, delay: 0.27 }, // C6
+        { freq: 1318.51, delay: 0.36 }  // E6 shimmer
+      ];
+
+      notes.forEach(({ freq, delay }) => {
+        const t = now + delay;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, t);
+
+        // Light vibrato via LFO
+        const lfo = ctx.createOscillator();
+        const lfoGain = ctx.createGain();
+        lfo.type = 'sine';
+        lfo.frequency.setValueAtTime(5.5, t);
+        lfoGain.gain.setValueAtTime(5.0, t); // 5Hz depth
+
+        lfo.connect(lfoGain);
+        lfoGain.connect(osc.frequency);
+
+        // Envelope: smooth attack, long golden tail (~1.8s)
+        gain.gain.setValueAtTime(0.001, t);
+        gain.gain.linearRampToValueAtTime(0.16, t + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.8);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        lfo.start(t);
+        osc.start(t);
+
+        lfo.stop(t + 1.85);
+        osc.stop(t + 1.85);
+      });
     } catch (e) {}
   }
 
@@ -1573,6 +1750,9 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast('error', `Insufficient PTS balance (Cost: ${cost} PTS, you have ${currentUser.balance_pts} PTS).`);
       return;
     }
+
+    // Initialize or resume audio context on user gesture
+    const audioCtx = getCaseAudioContext();
 
     isCaseSpinning = true;
     if (btnOpenCase) btnOpenCase.disabled = true;
@@ -1624,7 +1804,7 @@ document.addEventListener('DOMContentLoaded', () => {
         caseSpinnerTrack.style.transform = `translateX(-${targetOffset}px)`;
       });
 
-      // Sound ticker effect
+      // Sound ticker effect with mechanical ratchet deceleration
       playSpinTicker(5500);
 
       // On animation complete (5.5s)
@@ -1635,6 +1815,18 @@ document.addEventListener('DOMContentLoaded', () => {
           if (cards[winningIndex]) {
             cards[winningIndex].classList.add('winner-highlight');
           }
+        }
+
+        // Play land audio: subtle punchy bass thud
+        if (audioCtx) {
+          playLandThud(audioCtx);
+        }
+
+        // Play victory stingers
+        if (winner.rarity === 'gold') {
+          if (audioCtx) playGoldShimmerChord(audioCtx);
+        } else if (winner.rarity === 'covert') {
+          if (audioCtx) playCovertFanfare(audioCtx);
         }
 
         // Update user balance
@@ -1659,6 +1851,15 @@ document.addEventListener('DOMContentLoaded', () => {
           caseResultPoints.textContent = `+${json.rewardPts} PTS (Net: ${json.netChange >= 0 ? '+' : ''}${json.netChange})`;
           caseResultTitle.textContent = winner.name;
           caseResultMessage.textContent = json.message;
+
+          if (caseResultBundleBadge) {
+            if (json.bundleAwarded) {
+              caseResultBundleBadge.style.display = 'inline-block';
+              caseResultBundleBadge.textContent = `🎁 ${json.bundleAwarded.toUpperCase()} QUEUED`;
+            } else {
+              caseResultBundleBadge.style.display = 'none';
+            }
+          }
 
           caseResultCard.style.display = 'block';
           caseResultCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });

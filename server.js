@@ -944,38 +944,38 @@ app.post('/api/casino/plinko', requireAuth, (req, res) => {
  * - Special Rare (Gold ★): ~0.5% total
  */
 const CASE_ITEMS = [
-  // Mil-Spec (Blue, ~70%)
+  // Mil-Spec (Blue, ~70%) - strictly raw PTS drops
   {
-    id: 'milspec_log',
-    name: 'Testing Diagnostics Log',
+    id: 'milspec_10',
+    name: '10 PTS',
+    category: 'Mil-Spec',
+    rarity: 'mil-spec',
+    rarityColor: '#4b69ff',
+    reward: 10,
+    weight: 28,
+    icon: '🪙',
+    image: null
+  },
+  {
+    id: 'milspec_15',
+    name: '15 PTS',
     category: 'Mil-Spec',
     rarity: 'mil-spec',
     rarityColor: '#4b69ff',
     reward: 15,
-    weight: 28,
-    icon: '📋',
-    image: null
-  },
-  {
-    id: 'milspec_cache',
-    name: 'QA Defect Cache',
-    category: 'Mil-Spec',
-    rarity: 'mil-spec',
-    rarityColor: '#4b69ff',
-    reward: 20,
     weight: 24,
-    icon: '🗃️',
+    icon: '🪙',
     image: null
   },
   {
-    id: 'milspec_badge',
-    name: 'Bug Hunter Ribbon',
+    id: 'milspec_25',
+    name: '25 PTS',
     category: 'Mil-Spec',
     rarity: 'mil-spec',
     rarityColor: '#4b69ff',
     reward: 25,
     weight: 18,
-    icon: '🎖️',
+    icon: '🪙',
     image: null
   },
 
@@ -1039,7 +1039,13 @@ const CASE_ITEMS = [
     reward: 1000,
     weight: 0.5,
     icon: '🌟',
-    image: '/assets/special_gold.webp'
+    image: '/assets/special_gold.webp',
+    bundleItem: {
+      id: 'tester_mega_bundle',
+      name: 'Tester Mega Bundle',
+      category: 'Bundle',
+      price: 1000
+    }
   }
 ];
 
@@ -1068,7 +1074,7 @@ function generateCaseTape(winner, winningIndex = 35, count = 50) {
 const CASE_OPEN_COST = 50;
 
 /**
- * CS:GO / CS2 Style Case Opening Controller
+ * ASX Case Opener Controller
  */
 async function handleCaseOpening(req, res) {
   try {
@@ -1089,21 +1095,62 @@ async function handleCaseOpening(req, res) {
     db.updateBalance(user.discord_id, -cost);
 
     // Roll winner and generate 50-item tape with winner strictly at index 35
-    const winner = rollCaseWinner();
+    const winner = (typeof module.exports.rollCaseWinner === 'function')
+      ? module.exports.rollCaseWinner()
+      : rollCaseWinner();
     const winningIndex = 35;
-    const tape = generateCaseTape(winner, winningIndex, 50);
+    const tape = (typeof module.exports.generateCaseTape === 'function')
+      ? module.exports.generateCaseTape(winner, winningIndex, 50)
+      : generateCaseTape(winner, winningIndex, 50);
 
     // Credit reward PTS
     db.updateBalance(user.discord_id, winner.reward);
 
+    // If Gold ★ Special Rare: award exclusive bundle directly to user inventory/fulfillment queue
+    let bundleAwarded = null;
+    if (winner.rarity === 'gold') {
+      const bundle = winner.bundleItem || {
+        id: 'tester_mega_bundle',
+        name: 'Tester Mega Bundle',
+        category: 'Bundle',
+        price: 1000
+      };
+      try {
+        db.addInventoryItem({
+          discord_id: user.discord_id,
+          item_id: bundle.id,
+          item_name: bundle.name,
+          category: bundle.category,
+          price_pts: bundle.price || 1000
+        });
+        bundleAwarded = bundle.name;
+
+        db.createAuditLog({
+          action_type: 'CASE_JACKPOT',
+          actor_id: user.discord_id,
+          actor_name: user.username,
+          target_id: user.discord_id,
+          target_name: user.username,
+          details: `Unboxed ★ Special Mew Trio! Awarded 1,000 PTS + ${bundle.name} to inventory queue.`,
+          delta_pts: winner.reward
+        });
+      } catch (invErr) {
+        console.error('[Case Opening Bundle Error]:', invErr);
+      }
+    }
+
     const updatedUser = db.getUser(user.discord_id);
     const netChange = winner.reward - cost;
 
-    // Log notable wins to Discord logs webhook
-    if (winner.rarity === 'gold' || winner.rarity === 'covert' || winner.reward >= 100) {
-      logCasinoActivity({
+    // Discord Webhook Logging: Fire embed to #economy-logs ONLY for Covert (Red) and Special Rare (Gold ★) drops.
+    // Blue, Purple, and Pink drops must be silent and NOT send any webhook messages.
+    if (winner.rarity === 'gold' || winner.rarity === 'covert') {
+      const logger = (typeof module.exports.logCasinoActivity === 'function')
+        ? module.exports.logCasinoActivity
+        : logCasinoActivity;
+      logger({
         user,
-        game: 'CS2 Case Opening',
+        game: 'ASX Case Opener',
         bet: cost,
         multiplier: Number((winner.reward / cost).toFixed(2)),
         payout: winner.reward,
@@ -1121,8 +1168,9 @@ async function handleCaseOpening(req, res) {
       rewardPts: winner.reward,
       netChange,
       newBalance: updatedUser.balance_pts,
+      bundleAwarded,
       message: winner.rarity === 'gold'
-        ? `🌟 JACKPOT! You unboxed the ultra-rare ${winner.name}! (+${winner.reward} PTS, Net: +${netChange} PTS)`
+        ? `🌟 JACKPOT! You unboxed ${winner.name}! (+${winner.reward} PTS & ${bundleAwarded || 'Tester Mega Bundle'} queued to Inventory, Net: +${netChange} PTS)`
         : `Unboxed [${winner.category}] ${winner.name}! (+${winner.reward} PTS, Net: ${netChange >= 0 ? '+' : ''}${netChange} PTS)`
     });
   } catch (error) {
