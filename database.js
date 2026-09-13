@@ -13,6 +13,31 @@ db.pragma('foreign_keys = ON');
 
 // Initialize schema
 const initSchema = () => {
+  // Check and migrate point_requests table if DECLINED is not yet in CHECK constraint
+  try {
+    const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE name = 'point_requests'").get();
+    if (tableInfo && !tableInfo.sql.includes('DECLINED')) {
+      db.exec(`
+        CREATE TABLE point_requests_migration (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          username TEXT NOT NULL,
+          discord_id TEXT NOT NULL,
+          points INTEGER NOT NULL CHECK(points > 0),
+          work_type TEXT NOT NULL,
+          description TEXT NOT NULL,
+          proof_url TEXT,
+          status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING', 'APPROVED', 'REJECTED', 'DECLINED')),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO point_requests_migration SELECT * FROM point_requests;
+        DROP TABLE point_requests;
+        ALTER TABLE point_requests_migration RENAME TO point_requests;
+      `);
+    }
+  } catch (err) {
+    console.warn('[DB Migration Warning]:', err.message);
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       discord_id TEXT PRIMARY KEY,
@@ -30,7 +55,7 @@ const initSchema = () => {
       work_type TEXT NOT NULL,
       description TEXT NOT NULL,
       proof_url TEXT,
-      status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING', 'APPROVED', 'REJECTED')),
+      status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING', 'APPROVED', 'REJECTED', 'DECLINED')),
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -43,9 +68,22 @@ const initSchema = () => {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      action_type TEXT NOT NULL,
+      actor_id TEXT,
+      actor_name TEXT,
+      target_id TEXT,
+      target_name TEXT,
+      details TEXT,
+      delta_pts INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE INDEX IF NOT EXISTS idx_users_balance ON users(balance_pts DESC);
     CREATE INDEX IF NOT EXISTS idx_point_requests_status ON point_requests(status);
     CREATE INDEX IF NOT EXISTS idx_point_requests_created_at ON point_requests(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
   `);
 };
 
@@ -106,6 +144,24 @@ const updateStatusStmt = db.prepare(`
   UPDATE point_requests
   SET status = ?
   WHERE id = ?
+`);
+
+const getAllUsersStmt = db.prepare(`
+  SELECT discord_id, username, avatar, balance_pts, created_at
+  FROM users
+  ORDER BY username COLLATE NOCASE ASC
+`);
+
+const insertAuditLogStmt = db.prepare(`
+  INSERT INTO audit_logs (action_type, actor_id, actor_name, target_id, target_name, details, delta_pts)
+  VALUES (@action_type, @actor_id, @actor_name, @target_id, @target_name, @details, @delta_pts)
+`);
+
+const getAuditLogsStmt = db.prepare(`
+  SELECT id, action_type, actor_id, actor_name, target_id, target_name, details, delta_pts, created_at
+  FROM audit_logs
+  ORDER BY id DESC
+  LIMIT ?
 `);
 
 /**
@@ -192,12 +248,29 @@ function getLeaderboard(limit = 20) {
  * @returns {number|bigint}
  */
 function recordPurchase({ discord_id, item_id, item_name, cost }) {
+  const id = String(discord_id).trim();
   const res = insertPurchaseStmt.run({
-    discord_id: String(discord_id).trim(),
+    discord_id: id,
     item_id: String(item_id).trim(),
     item_name: String(item_name).trim(),
     cost: parseInt(cost, 10)
   });
+
+  try {
+    const user = getUser(id);
+    createAuditLog({
+      action_type: 'SHOP_PURCHASE',
+      actor_id: id,
+      actor_name: user ? user.username : 'Tester',
+      target_id: id,
+      target_name: user ? user.username : 'Tester',
+      details: `Purchased ${item_name}`,
+      delta_pts: -parseInt(cost, 10)
+    });
+  } catch (err) {
+    console.warn('[Audit Log Purchase Error]:', err.message);
+  }
+
   return res.lastInsertRowid;
 }
 
@@ -235,13 +308,44 @@ function getRequestById(id) {
  * Safely updates request status with validation.
  */
 function updateRequestStatus(id, status) {
-  const validStatuses = ['PENDING', 'APPROVED', 'REJECTED'];
+  const validStatuses = ['PENDING', 'APPROVED', 'REJECTED', 'DECLINED'];
   const upperStatus = String(status).trim().toUpperCase();
   if (!validStatuses.includes(upperStatus)) {
     throw new Error(`Invalid status: ${status}. Must be one of: ${validStatuses.join(', ')}`);
   }
   const result = updateStatusStmt.run(upperStatus, parseInt(id, 10));
   return result.changes > 0;
+}
+
+/**
+ * Fetch all registered users
+ */
+function getAllUsers() {
+  return getAllUsersStmt.all();
+}
+
+/**
+ * Record an audit log entry
+ */
+function createAuditLog({ action_type, actor_id, actor_name, target_id, target_name, details, delta_pts }) {
+  const res = insertAuditLogStmt.run({
+    action_type: String(action_type || 'SYSTEM').toUpperCase().trim(),
+    actor_id: actor_id ? String(actor_id).trim() : null,
+    actor_name: actor_name ? String(actor_name).trim() : null,
+    target_id: target_id ? String(target_id).trim() : null,
+    target_name: target_name ? String(target_name).trim() : null,
+    details: details ? String(details).trim() : null,
+    delta_pts: parseInt(delta_pts, 10) || 0
+  });
+  return res.lastInsertRowid;
+}
+
+/**
+ * Fetch recent audit logs
+ */
+function getAuditLogs(limit = 50) {
+  const sanitizedLimit = Math.max(1, Math.min(parseInt(limit, 10) || 50, 200));
+  return getAuditLogsStmt.all(sanitizedLimit);
 }
 
 /**
@@ -264,5 +368,8 @@ module.exports = {
   getAllRequests,
   getRequestById,
   updateRequestStatus,
+  getAllUsers,
+  createAuditLog,
+  getAuditLogs,
   close
 };

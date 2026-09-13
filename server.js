@@ -42,6 +42,25 @@ function requireAuth(req, res, next) {
 }
 
 /**
+ * Role-Based Access Control: Lead QA Authorization Middleware
+ */
+function requireLeadTester(req, res, next) {
+  if (!req.session || !req.session.user) {
+    return res.status(401).json({
+      success: false,
+      error: 'Authentication required. Please log in with Discord.'
+    });
+  }
+  if (!req.session.user.isLeadTester) {
+    return res.status(403).json({
+      success: false,
+      error: 'Forbidden: Lead QA authorization required.'
+    });
+  }
+  next();
+}
+
+/**
  * Validate URL string
  */
 function isValidHttpUrl(urlString) {
@@ -318,7 +337,8 @@ app.get('/auth/discord/callback', async (req, res) => {
 
     const userData = await userResponse.json();
 
-    // 3. Strict Gatekeeper: Verify Guild Membership via Bot Token
+    // 3. Strict Gatekeeper: Verify Guild Membership & Lead QA Role via Bot Token
+    let isLeadTester = false;
     if (botToken && guildId) {
       const memberResponse = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${userData.id}`, {
         headers: { Authorization: `Bot ${botToken}` }
@@ -327,6 +347,13 @@ app.get('/auth/discord/callback', async (req, res) => {
       if (!memberResponse.ok) {
         console.warn(`[Gatekeeper] Access Denied for User ID ${userData.id} (${userData.username}). Not a member of guild ${guildId}.`);
         return res.status(403).send(renderAccessDeniedHtml(userData.global_name || userData.username));
+      }
+
+      const memberData = await memberResponse.json();
+      const memberRoles = memberData.roles || [];
+      const leadRoleId = process.env.LEAD_TESTER_ROLE_ID;
+      if (leadRoleId && memberRoles.includes(leadRoleId)) {
+        isLeadTester = true;
       }
     }
 
@@ -346,7 +373,8 @@ app.get('/auth/discord/callback', async (req, res) => {
     req.session.user = {
       id: userData.id,
       username: dbUser.username,
-      avatar: dbUser.avatar
+      avatar: dbUser.avatar,
+      isLeadTester
     };
 
     res.redirect('/');
@@ -375,12 +403,14 @@ if (process.env.ALLOW_DEV_LOGIN === 'true' || process.env.NODE_ENV === 'test') {
     const discord_id = req.query.discord_id || '1546968192264568883';
     const username = req.query.username || 'Test_QA_User';
     const avatar = req.query.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
+    const isLeadTester = req.query.is_lead === 'true' || req.query.lead === 'true';
 
     const dbUser = db.upsertUser({ discord_id, username, avatar });
     req.session.user = {
       id: dbUser.discord_id,
       username: dbUser.username,
-      avatar: dbUser.avatar
+      avatar: dbUser.avatar,
+      isLeadTester
     };
     res.redirect('/');
   });
@@ -391,7 +421,7 @@ if (process.env.ALLOW_DEV_LOGIN === 'true' || process.env.NODE_ENV === 'test') {
 /**
  * Get current user & balance
  */
-app.get('/api/me', (req, res) => {
+app.get('/api/me', async (req, res) => {
   if (!req.session || !req.session.user) {
     return res.json({
       authenticated: false,
@@ -408,6 +438,26 @@ app.get('/api/me', (req, res) => {
     });
   }
 
+  // Refresh role verification with Discord API if available
+  const botToken = process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN;
+  const guildId = process.env.DISCORD_GUILD_ID || process.env.GUILD_ID;
+  const leadRoleId = process.env.LEAD_TESTER_ROLE_ID;
+
+  if (botToken && guildId && leadRoleId && req.session.user.id) {
+    try {
+      const memberRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${req.session.user.id}`, {
+        headers: { Authorization: `Bot ${botToken}` }
+      });
+      if (memberRes.ok) {
+        const memberData = await memberRes.json();
+        const memberRoles = memberData.roles || [];
+        req.session.user.isLeadTester = memberRoles.includes(leadRoleId);
+      }
+    } catch (err) {
+      console.warn('[Role Refresh Error]:', err.message);
+    }
+  }
+
   res.json({
     authenticated: true,
     user: {
@@ -415,6 +465,7 @@ app.get('/api/me', (req, res) => {
       username: dbUser.username,
       avatar: dbUser.avatar,
       balance_pts: dbUser.balance_pts,
+      isLeadTester: Boolean(req.session.user.isLeadTester),
       created_at: dbUser.created_at
     }
   });
@@ -964,6 +1015,301 @@ app.post('/api/request-points', requireAuth, async (req, res) => {
       success: false,
       error: 'Internal server error while processing request.'
     });
+  }
+});
+
+// ---------------- LEAD QA PANEL APIS & WEBHOOKS ----------------
+
+/**
+ * Dispatches Discord Webhook for QA report review verdicts (Approve / Decline)
+ */
+async function dispatchReviewWebhook(action, submission, leadUser) {
+  if (!DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL.includes('your_webhook_id')) return;
+
+  const isApprove = (action === 'approve');
+  const title = isApprove ? '✅ QA Request Approved' : '❌ QA Request Declined';
+  const color = isApprove ? 0x57F287 : 0xED4245;
+
+  const fields = isApprove
+    ? [
+        { name: 'Tester', value: `${submission.username} (<@${submission.discord_id}>)`, inline: true },
+        { name: 'Points Awarded', value: `+${submission.points} PTS`, inline: true },
+        { name: 'Approved By', value: `${leadUser.username} (<@${leadUser.id}>)`, inline: true },
+        { name: 'Request ID', value: `#${submission.id}`, inline: true }
+      ]
+    : [
+        { name: 'Tester', value: `${submission.username} (<@${submission.discord_id}>)`, inline: true },
+        { name: 'Declined By', value: `${leadUser.username} (<@${leadUser.id}>)`, inline: true },
+        { name: 'Request ID', value: `#${submission.id}`, inline: true }
+      ];
+
+  const embed = {
+    title,
+    color,
+    fields,
+    footer: {
+      text: `Lead ID: ${leadUser.id} • Status: ${isApprove ? 'APPROVED' : 'DECLINED'}`
+    },
+    timestamp: new Date().toISOString()
+  };
+
+  try {
+    const response = await fetch(DISCORD_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ embeds: [embed] })
+    });
+    if (!response.ok) {
+      console.error('[Review Webhook Error] Status:', response.status);
+    }
+  } catch (err) {
+    console.error('[Review Webhook Network Error]:', err.message);
+  }
+}
+
+/**
+ * Dispatches Discord Webhook for manual balance adjustments
+ */
+async function dispatchGrantWebhook({ targetUser, amount, newBalance, reason, leadUser }) {
+  if (!DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL.includes('your_webhook_id')) return;
+
+  const sign = amount >= 0 ? '+' : '';
+  const embed = {
+    title: '⚖️ Manual Balance Adjustment',
+    color: 0xFEE75C, // Gold
+    fields: [
+      { name: 'Tester', value: `${targetUser.username} (<@${targetUser.discord_id}>)`, inline: true },
+      { name: 'Adjustment', value: `${sign}${amount} PTS`, inline: true },
+      { name: 'New Balance', value: `${newBalance} PTS`, inline: true },
+      { name: 'Reason', value: reason || 'No reason provided', inline: false },
+      { name: 'Lead', value: `${leadUser.username} (<@${leadUser.id}>)`, inline: true }
+    ],
+    footer: {
+      text: `Lead ID: ${leadUser.id} • User ID: ${targetUser.discord_id}`
+    },
+    timestamp: new Date().toISOString()
+  };
+
+  try {
+    const response = await fetch(DISCORD_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ embeds: [embed] })
+    });
+    if (!response.ok) {
+      console.error('[Grant Webhook Error] Status:', response.status);
+    }
+  } catch (err) {
+    console.error('[Grant Webhook Network Error]:', err.message);
+  }
+}
+
+/**
+ * Lead QA: Fetch all QA submissions
+ */
+app.get('/api/admin/submissions', requireLeadTester, (req, res) => {
+  try {
+    const submissions = db.getAllRequests(200);
+    res.json({
+      success: true,
+      submissions
+    });
+  } catch (error) {
+    console.error('[Admin Submissions Error]:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve submissions.' });
+  }
+});
+
+/**
+ * Lead QA: Review QA submission (Approve / Decline)
+ */
+app.post('/api/admin/submissions/:id/review', requireLeadTester, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { action } = req.body;
+    const act = String(action || '').toLowerCase().trim();
+
+    if (act !== 'approve' && act !== 'decline') {
+      return res.status(400).json({ success: false, error: 'Action must be "approve" or "decline".' });
+    }
+
+    const submission = db.getRequestById(id);
+    if (!submission) {
+      return res.status(404).json({ success: false, error: 'Submission not found.' });
+    }
+
+    if (submission.status !== 'PENDING') {
+      return res.status(400).json({
+        success: false,
+        error: `Submission has already been reviewed (${submission.status}).`
+      });
+    }
+
+    const leadUser = req.session.user;
+
+    if (act === 'approve') {
+      // Atomically credit points to submitter's balance
+      const updatedTarget = db.updateBalance(submission.discord_id, submission.points);
+      db.updateRequestStatus(id, 'APPROVED');
+
+      db.createAuditLog({
+        action_type: 'REPORT_APPROVE',
+        actor_id: leadUser.id,
+        actor_name: leadUser.username,
+        target_id: submission.discord_id,
+        target_name: submission.username,
+        details: `Approved QA report #${id} (+${submission.points} PTS)`,
+        delta_pts: submission.points
+      });
+
+      dispatchReviewWebhook('approve', submission, leadUser).catch(err => {
+        console.error('[Async Review Webhook Error]:', err);
+      });
+
+      return res.json({
+        success: true,
+        status: 'APPROVED',
+        newBalance: updatedTarget.balance_pts,
+        message: `Submission #${id} approved! Credited ${submission.points} PTS to ${submission.username}.`
+      });
+    } else {
+      // Decline
+      db.updateRequestStatus(id, 'DECLINED');
+
+      db.createAuditLog({
+        action_type: 'REPORT_DECLINE',
+        actor_id: leadUser.id,
+        actor_name: leadUser.username,
+        target_id: submission.discord_id,
+        target_name: submission.username,
+        details: `Declined QA report #${id}`,
+        delta_pts: 0
+      });
+
+      dispatchReviewWebhook('decline', submission, leadUser).catch(err => {
+        console.error('[Async Review Webhook Error]:', err);
+      });
+
+      return res.json({
+        success: true,
+        status: 'DECLINED',
+        message: `Submission #${id} declined.`
+      });
+    }
+  } catch (error) {
+    console.error('[Review Submission Error]:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to review submission.' });
+  }
+});
+
+/**
+ * Lead QA: Get all registered testers
+ */
+app.get('/api/admin/users', requireLeadTester, (req, res) => {
+  try {
+    const users = db.getAllUsers();
+    res.json({
+      success: true,
+      users: users.map(u => ({
+        discord_id: u.discord_id,
+        username: u.username,
+        avatar: u.avatar,
+        balance_pts: u.balance_pts
+      }))
+    });
+  } catch (error) {
+    console.error('[Admin Users Error]:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve registered testers.' });
+  }
+});
+
+/**
+ * Lead QA: Direct Token Grant / Revoke
+ */
+app.post('/api/admin/grant-pts', requireLeadTester, async (req, res) => {
+  try {
+    const { targetDiscordId, amount, reason } = req.body;
+    const pts = parseInt(amount, 10);
+    const sanitizedReason = String(reason || '').trim();
+
+    if (!targetDiscordId || typeof targetDiscordId !== 'string') {
+      return res.status(400).json({ success: false, error: 'Target tester Discord ID is required.' });
+    }
+
+    if (isNaN(pts) || pts === 0) {
+      return res.status(400).json({ success: false, error: 'PTS adjustment amount must be a non-zero integer.' });
+    }
+
+    if (!sanitizedReason) {
+      return res.status(400).json({ success: false, error: 'Reason for balance adjustment is required.' });
+    }
+
+    const targetUser = db.getUser(targetDiscordId);
+    if (!targetUser) {
+      return res.status(404).json({ success: false, error: 'Target tester not found.' });
+    }
+
+    if (targetUser.balance_pts + pts < 0) {
+      return res.status(400).json({
+        success: false,
+        error: `Adjustment would cause balance to drop below 0 (Current: ${targetUser.balance_pts} PTS, adjustment: ${pts} PTS).`
+      });
+    }
+
+    const updatedUser = db.updateBalance(targetDiscordId, pts);
+    const leadUser = req.session.user;
+
+    db.createAuditLog({
+      action_type: 'MANUAL_GRANT',
+      actor_id: leadUser.id,
+      actor_name: leadUser.username,
+      target_id: targetUser.discord_id,
+      target_name: targetUser.username,
+      details: sanitizedReason,
+      delta_pts: pts
+    });
+
+    dispatchGrantWebhook({
+      targetUser,
+      amount: pts,
+      newBalance: updatedUser.balance_pts,
+      reason: sanitizedReason,
+      leadUser
+    }).catch(err => {
+      console.error('[Async Grant Webhook Error]:', err);
+    });
+
+    return res.json({
+      success: true,
+      targetUser: {
+        discord_id: updatedUser.discord_id,
+        username: updatedUser.username,
+        balance_pts: updatedUser.balance_pts
+      },
+      delta: pts,
+      newBalance: updatedUser.balance_pts,
+      message: `Successfully adjusted balance for ${targetUser.username} by ${pts >= 0 ? '+' : ''}${pts} PTS (New balance: ${updatedUser.balance_pts} PTS).`
+    });
+  } catch (error) {
+    console.error('[Grant PTS Error]:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to adjust balance.' });
+  }
+});
+
+/**
+ * Lead QA: Unified live audit logs feed
+ */
+app.get('/api/admin/logs', requireLeadTester, (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit, 10) || 50;
+    const logs = db.getAuditLogs(limit);
+    res.json({
+      success: true,
+      logs
+    });
+  } catch (error) {
+    console.error('[Admin Logs Error]:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve audit logs.' });
   }
 });
 

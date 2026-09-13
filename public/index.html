@@ -28,6 +28,9 @@
             <button type="button" class="nav-btn" data-tab="leaderboard">Leaderboard</button>
             <button type="button" class="nav-btn" data-tab="casino">Casino</button>
             <button type="button" class="nav-btn" data-tab="lootbox">Loot Boxes</button>
+            <button type="button" class="nav-btn nav-lead-btn" data-tab="admin" id="navAdminBtn" style="display: none;">
+              Lead Panel <span class="nav-admin-badge">Admin</span>
+            </button>
           </nav>
         </div>
 
@@ -116,6 +119,11 @@
             <div class="quick-icon">🎁</div>
             <h3>Loot Boxes</h3>
             <p>Open testing supply crates to unlock bonus PTS rewards.</p>
+          </div>
+          <div class="quick-card quick-admin-card" id="quickCardAdmin" data-jump="admin" style="display: none;">
+            <div class="quick-icon">🛡️</div>
+            <h3>Lead QA Panel</h3>
+            <p>Review testing submissions, grant or revoke PTS, and monitor live audit logs.</p>
           </div>
         </div>
       </section>
@@ -356,6 +364,131 @@
           </div>
           <div id="lootPayoutText" class="loot-payout">+50 PTS</div>
           <p id="lootMessageText" class="loot-message">Congratulations!</p>
+        </div>
+      </section>
+
+      <!-- View 7: Lead QA Panel (Role-Gated) -->
+      <section id="viewAdmin" class="view-panel" style="display: none;">
+        <div class="section-title-wrap text-between">
+          <div>
+            <div class="admin-title-row">
+              <h2 class="section-title">Lead QA Panel</h2>
+              <span class="admin-pill-badge">Lead Access</span>
+            </div>
+            <p class="section-sub">Authorized moderation panel for submission approvals, direct PTS adjustments, and system audit logs.</p>
+          </div>
+          <button type="button" id="btnRefreshAdmin" class="btn-refresh" title="Refresh Panel Data">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            Refresh
+          </button>
+        </div>
+
+        <div id="adminGlobalAlert" class="alert-banner" style="display: none;"></div>
+
+        <!-- Admin Sub-Navigation Tabs -->
+        <div class="admin-subnav">
+          <button type="button" class="admin-subnav-btn active" data-admin-tab="submissions">
+            Submissions Queue <span id="pendingSubmissionsBadge" class="tab-count-badge">0</span>
+          </button>
+          <button type="button" class="admin-subnav-btn" data-admin-tab="pts-manager">
+            Direct PTS Manager
+          </button>
+          <button type="button" class="admin-subnav-btn" data-admin-tab="audit-logs">
+            Live Audit Logs
+          </button>
+        </div>
+
+        <!-- Tab Section 1: Submissions Review -->
+        <div id="adminTabSubmissions" class="admin-sub-content">
+          <div class="card admin-table-card">
+            <div class="admin-filter-bar">
+              <span class="filter-label">Filter:</span>
+              <button type="button" class="sub-filter-btn active" data-sub-filter="PENDING">Pending Only</button>
+              <button type="button" class="sub-filter-btn" data-sub-filter="ALL">All Submissions</button>
+            </div>
+            <div class="table-wrap">
+              <table class="leaderboard-table admin-table">
+                <thead>
+                  <tr>
+                    <th style="width: 70px;">ID</th>
+                    <th style="min-width: 170px;">Tester</th>
+                    <th style="width: 90px;">Points</th>
+                    <th style="min-width: 250px;">Report Details</th>
+                    <th style="width: 90px;">Proof</th>
+                    <th style="width: 110px;">Status</th>
+                    <th style="min-width: 180px; text-align: right;">Review Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="adminSubmissionsTbody">
+                  <tr><td colspan="7" class="table-loading">Loading submissions...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab Section 2: Direct PTS Manager -->
+        <div id="adminTabPtsManager" class="admin-sub-content" style="display: none;">
+          <div class="card pts-manager-card">
+            <header class="card-header">
+              <h3 class="card-title">Direct PTS Manager</h3>
+              <p class="card-subtitle">Directly grant or revoke PTS from any registered tester. Actions are broadcasted to leads and logged.</p>
+            </header>
+
+            <form id="formGrantPts" class="submission-form" novalidate>
+              <div class="form-group">
+                <label for="grantTargetUser" class="form-label">Select Registered Tester</label>
+                <select id="grantTargetUser" class="form-input" required>
+                  <option value="">-- Choose tester --</option>
+                </select>
+              </div>
+
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label for="grantAmount" class="form-label">PTS Adjustment (+ or -)</label>
+                  <input type="number" id="grantAmount" class="form-input" placeholder="e.g. 50 or -25" required>
+                  <span class="optional-label">Use positive integer to credit, negative to deduct.</span>
+                </div>
+
+                <div class="form-group">
+                  <label for="grantReason" class="form-label">Reason / Justification</label>
+                  <input type="text" id="grantReason" class="form-input" placeholder="e.g. Compensation for stress test session" required>
+                </div>
+              </div>
+
+              <button type="submit" id="btnSubmitGrant" class="btn-primary">
+                <span id="btnGrantText">Apply PTS Adjustment</span>
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Tab Section 3: Live Audit Logs -->
+        <div id="adminTabAuditLogs" class="admin-sub-content" style="display: none;">
+          <div class="card admin-table-card">
+            <div class="table-wrap">
+              <table class="leaderboard-table admin-table">
+                <thead>
+                  <tr>
+                    <th style="width: 70px;">ID</th>
+                    <th style="width: 150px;">Action</th>
+                    <th style="min-width: 150px;">Actor (Lead)</th>
+                    <th style="min-width: 150px;">Target</th>
+                    <th style="width: 110px;">Delta PTS</th>
+                    <th style="min-width: 220px;">Details</th>
+                    <th style="width: 160px;">Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody id="adminLogsTbody">
+                  <tr><td colspan="7" class="table-loading">Loading audit logs...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </section>
 

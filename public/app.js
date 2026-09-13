@@ -24,7 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
     shop: document.getElementById('viewShop'),
     leaderboard: document.getElementById('viewLeaderboard'),
     casino: document.getElementById('viewCasino'),
-    lootbox: document.getElementById('viewLootbox')
+    lootbox: document.getElementById('viewLootbox'),
+    admin: document.getElementById('viewAdmin')
   };
 
   // Home Elements
@@ -77,6 +78,25 @@ document.addEventListener('DOMContentLoaded', () => {
   const leaderboardTbody = document.getElementById('leaderboardTbody');
   const btnRefreshLeaderboard = document.getElementById('btnRefreshLeaderboard');
 
+  // Lead QA Panel Elements
+  const navAdminBtn = document.getElementById('navAdminBtn');
+  const quickCardAdmin = document.getElementById('quickCardAdmin');
+  const btnRefreshAdmin = document.getElementById('btnRefreshAdmin');
+  const adminSubnavBtns = document.querySelectorAll('.admin-subnav-btn');
+  const adminTabSubmissions = document.getElementById('adminTabSubmissions');
+  const adminTabPtsManager = document.getElementById('adminTabPtsManager');
+  const adminTabAuditLogs = document.getElementById('adminTabAuditLogs');
+  const pendingSubmissionsBadge = document.getElementById('pendingSubmissionsBadge');
+  const subFilterBtns = document.querySelectorAll('.sub-filter-btn');
+  const adminSubmissionsTbody = document.getElementById('adminSubmissionsTbody');
+  const grantTargetUser = document.getElementById('grantTargetUser');
+  const formGrantPts = document.getElementById('formGrantPts');
+  const grantAmountInput = document.getElementById('grantAmount');
+  const grantReasonInput = document.getElementById('grantReason');
+  const btnSubmitGrant = document.getElementById('btnSubmitGrant');
+  const btnGrantText = document.getElementById('btnGrantText');
+  const adminLogsTbody = document.getElementById('adminLogsTbody');
+
   // ---------------- HELPER FUNCTIONS ----------------
 
   let toastTimer = null;
@@ -99,6 +119,14 @@ document.addEventListener('DOMContentLoaded', () => {
     navUsername.textContent = user.username;
     navBalance.textContent = user.balance_pts;
     navUserAvatar.src = user.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
+
+    // Lead QA Panel Nav & Shortcut Card visibility
+    if (navAdminBtn) {
+      navAdminBtn.style.display = user.isLeadTester ? 'inline-flex' : 'none';
+    }
+    if (quickCardAdmin) {
+      quickCardAdmin.style.display = user.isLeadTester ? 'block' : 'none';
+    }
 
     // Home
     homeUsername.textContent = user.username;
@@ -138,6 +166,8 @@ document.addEventListener('DOMContentLoaded', () => {
       loadLeaderboard();
     } else if (tabName === 'shop' && shopCatalog.length === 0) {
       loadShopCatalog();
+    } else if (tabName === 'admin') {
+      loadAdminData();
     }
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -609,6 +639,280 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   });
+
+  // ---------------- LEAD QA PANEL ----------------
+
+  let activeAdminTab = 'submissions';
+  let subStatusFilter = 'PENDING';
+  let cachedSubmissions = [];
+
+  function switchAdminTab(tab) {
+    activeAdminTab = tab;
+    adminSubnavBtns.forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-admin-tab') === tab);
+    });
+    if (adminTabSubmissions) adminTabSubmissions.style.display = (tab === 'submissions') ? 'block' : 'none';
+    if (adminTabPtsManager) adminTabPtsManager.style.display = (tab === 'pts-manager') ? 'block' : 'none';
+    if (adminTabAuditLogs) adminTabAuditLogs.style.display = (tab === 'audit-logs') ? 'block' : 'none';
+
+    if (tab === 'submissions') loadAdminSubmissions();
+    else if (tab === 'pts-manager') loadAdminUsers();
+    else if (tab === 'audit-logs') loadAdminLogs();
+  }
+
+  adminSubnavBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      switchAdminTab(btn.getAttribute('data-admin-tab'));
+    });
+  });
+
+  subFilterBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      subFilterBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      subStatusFilter = btn.getAttribute('data-sub-filter');
+      renderSubmissionsTable();
+    });
+  });
+
+  function renderSubmissionsTable() {
+    if (!adminSubmissionsTbody) return;
+
+    const pendingCount = cachedSubmissions.filter(s => s.status === 'PENDING').length;
+    if (pendingSubmissionsBadge) {
+      pendingSubmissionsBadge.textContent = pendingCount;
+      pendingSubmissionsBadge.classList.toggle('zero', pendingCount === 0);
+    }
+
+    const list = (subStatusFilter === 'ALL')
+      ? cachedSubmissions
+      : cachedSubmissions.filter(s => s.status === 'PENDING');
+
+    if (list.length === 0) {
+      adminSubmissionsTbody.innerHTML = `<tr><td colspan="7" class="table-empty">No ${subStatusFilter === 'PENDING' ? 'pending' : ''} submissions found.</td></tr>`;
+      return;
+    }
+
+    adminSubmissionsTbody.innerHTML = list.map(sub => {
+      const proofHtml = sub.proof_url
+        ? `<a href="${sub.proof_url}" target="_blank" rel="noopener noreferrer" class="proof-link">View Proof</a>`
+        : '<span style="color: var(--text-muted); font-size: 0.8rem;">None</span>';
+
+      const statusClass = `status-${sub.status.toLowerCase()}`;
+      const isPending = sub.status === 'PENDING';
+
+      const actionsHtml = isPending ? `
+        <div class="review-actions-wrap">
+          <button type="button" class="btn-review-approve" data-id="${sub.id}">Approve</button>
+          <button type="button" class="btn-review-decline" data-id="${sub.id}">Decline</button>
+        </div>
+      ` : `<span class="reviewed-label">${sub.status}</span>`;
+
+      return `
+        <tr>
+          <td style="font-weight: 700; color: var(--text-muted);">#${sub.id}</td>
+          <td>
+            <div class="tester-name-wrap">
+              <span class="tester-name">${String(sub.username || 'Tester').replace(/</g, '&lt;')}</span>
+              <span style="font-size: 0.72rem; color: var(--text-muted);">${sub.discord_id}</span>
+            </div>
+          </td>
+          <td style="font-weight: 700; color: #7986ff;">+${sub.points} PTS</td>
+          <td><div class="report-text-cell">${String(sub.description || '').replace(/</g, '&lt;')}</div></td>
+          <td>${proofHtml}</td>
+          <td><span class="status-pill ${statusClass}">${sub.status}</span></td>
+          <td style="text-align: right;">${actionsHtml}</td>
+        </tr>
+      `;
+    }).join('');
+
+    // Attach click listeners for Approve and Decline
+    adminSubmissionsTbody.querySelectorAll('.btn-review-approve').forEach(btn => {
+      btn.addEventListener('click', () => handleReviewAction(btn.getAttribute('data-id'), 'approve', btn));
+    });
+    adminSubmissionsTbody.querySelectorAll('.btn-review-decline').forEach(btn => {
+      btn.addEventListener('click', () => handleReviewAction(btn.getAttribute('data-id'), 'decline', btn));
+    });
+  }
+
+  async function handleReviewAction(id, action, buttonEl) {
+    const isApprove = (action === 'approve');
+    if (!confirm(`Are you sure you want to ${isApprove ? 'APPROVE' : 'DECLINE'} QA submission #${id}?`)) {
+      return;
+    }
+
+    if (buttonEl) buttonEl.disabled = true;
+
+    try {
+      const res = await fetch(`/api/admin/submissions/${id}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        showToast('success', data.message);
+        // If current user is the submitter, update local balance
+        const targetSub = cachedSubmissions.find(s => String(s.id) === String(id));
+        if (targetSub && currentUser && targetSub.discord_id === currentUser.discord_id && data.newBalance !== undefined) {
+          currentUser.balance_pts = data.newBalance;
+          updateUserData(currentUser);
+        }
+        loadAdminSubmissions();
+      } else {
+        showToast('error', data.error || 'Failed to review submission.');
+      }
+    } catch (err) {
+      showToast('error', 'Network error reviewing submission.');
+    } finally {
+      if (buttonEl) buttonEl.disabled = false;
+    }
+  }
+
+  async function loadAdminSubmissions() {
+    if (!adminSubmissionsTbody) return;
+    adminSubmissionsTbody.innerHTML = '<tr><td colspan="7" class="table-loading">Loading submissions...</td></tr>';
+
+    try {
+      const res = await fetch('/api/admin/submissions');
+      const data = await res.json();
+
+      if (data.success && Array.isArray(data.submissions)) {
+        cachedSubmissions = data.submissions;
+        renderSubmissionsTable();
+      } else {
+        adminSubmissionsTbody.innerHTML = '<tr><td colspan="7" class="table-empty">Failed to load submissions.</td></tr>';
+      }
+    } catch (err) {
+      adminSubmissionsTbody.innerHTML = '<tr><td colspan="7" class="table-empty">Error fetching submissions.</td></tr>';
+    }
+  }
+
+  async function loadAdminUsers() {
+    if (!grantTargetUser) return;
+    try {
+      const res = await fetch('/api/admin/users');
+      const data = await res.json();
+
+      if (data.success && Array.isArray(data.users)) {
+        const currentSelected = grantTargetUser.value;
+        grantTargetUser.innerHTML = '<option value="">-- Choose registered tester --</option>' +
+          data.users.map(u => `
+            <option value="${u.discord_id}">
+              ${u.username} (${u.balance_pts.toLocaleString()} PTS) - ID: ${u.discord_id}
+            </option>
+          `).join('');
+        if (currentSelected) grantTargetUser.value = currentSelected;
+      }
+    } catch (err) {
+      console.error('Failed to load registered users:', err);
+    }
+  }
+
+  if (formGrantPts) {
+    formGrantPts.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const targetDiscordId = grantTargetUser.value;
+      const amount = parseInt(grantAmountInput.value, 10);
+      const reason = grantReasonInput.value.trim();
+
+      if (!targetDiscordId) {
+        showToast('error', 'Please select a registered tester.');
+        return;
+      }
+      if (isNaN(amount) || amount === 0) {
+        showToast('error', 'Adjustment amount must be a non-zero integer.');
+        return;
+      }
+      if (!reason) {
+        showToast('error', 'Please provide a reason for the adjustment.');
+        return;
+      }
+
+      btnSubmitGrant.disabled = true;
+      btnGrantText.textContent = 'Applying...';
+
+      try {
+        const res = await fetch('/api/admin/grant-pts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetDiscordId, amount, reason })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          showToast('success', data.message);
+          grantAmountInput.value = '';
+          grantReasonInput.value = '';
+          loadAdminUsers();
+          if (currentUser && currentUser.discord_id === targetDiscordId) {
+            currentUser.balance_pts = data.newBalance;
+            updateUserData(currentUser);
+          }
+        } else {
+          showToast('error', data.error || 'Failed to adjust balance.');
+        }
+      } catch (err) {
+        showToast('error', 'Network error during balance adjustment.');
+      } finally {
+        btnSubmitGrant.disabled = false;
+        btnGrantText.textContent = 'Apply PTS Adjustment';
+      }
+    });
+  }
+
+  async function loadAdminLogs() {
+    if (!adminLogsTbody) return;
+    adminLogsTbody.innerHTML = '<tr><td colspan="7" class="table-loading">Loading live audit logs...</td></tr>';
+
+    try {
+      const res = await fetch('/api/admin/logs?limit=50');
+      const data = await res.json();
+
+      if (!data.success || !Array.isArray(data.logs) || data.logs.length === 0) {
+        adminLogsTbody.innerHTML = '<tr><td colspan="7" class="table-empty">No audit events recorded yet.</td></tr>';
+        return;
+      }
+
+      adminLogsTbody.innerHTML = data.logs.map(log => {
+        let actionClass = 'action-grant';
+        if (log.action_type === 'REPORT_APPROVE') actionClass = 'action-approve';
+        else if (log.action_type === 'REPORT_DECLINE') actionClass = 'action-decline';
+        else if (log.action_type === 'SHOP_PURCHASE') actionClass = 'action-purchase';
+
+        const deltaPts = log.delta_pts || 0;
+        const deltaClass = deltaPts > 0 ? 'pts-plus' : (deltaPts < 0 ? 'pts-minus' : 'pts-neutral');
+        const deltaText = deltaPts > 0 ? `+${deltaPts} PTS` : (deltaPts < 0 ? `${deltaPts} PTS` : '—');
+
+        return `
+          <tr>
+            <td style="font-weight: 700; color: var(--text-muted);">#${log.id}</td>
+            <td><span class="action-pill ${actionClass}">${log.action_type}</span></td>
+            <td><span style="font-weight: 600;">${log.actor_name || 'System'}</span></td>
+            <td><span style="color: var(--text);">${log.target_name || log.target_id || '—'}</span></td>
+            <td class="${deltaClass}">${deltaText}</td>
+            <td><span style="color: var(--text-muted); font-size: 0.84rem;">${String(log.details || '—').replace(/</g, '&lt;')}</span></td>
+            <td style="font-size: 0.78rem; color: var(--text-muted); white-space: nowrap;">${log.created_at}</td>
+          </tr>
+        `;
+      }).join('');
+    } catch (err) {
+      adminLogsTbody.innerHTML = '<tr><td colspan="7" class="table-empty">Failed to load audit logs.</td></tr>';
+    }
+  }
+
+  function loadAdminData() {
+    if (activeAdminTab === 'submissions') loadAdminSubmissions();
+    else if (activeAdminTab === 'pts-manager') loadAdminUsers();
+    else if (activeAdminTab === 'audit-logs') loadAdminLogs();
+  }
+
+  if (btnRefreshAdmin) {
+    btnRefreshAdmin.addEventListener('click', () => {
+      loadAdminData();
+    });
+  }
 
   // Run initial authentication check
   checkAuth();
