@@ -73,13 +73,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnDropBall = document.getElementById('btnDropBall');
   const btnDropBallText = document.getElementById('btnDropBallText');
 
-  // Lootbox Elements
-  const crateOpenButtons = document.querySelectorAll('.btn-open-crate');
-  const lootResultCard = document.getElementById('lootResultCard');
-  const lootRarityTag = document.getElementById('lootRarityTag');
-  const lootItemTitle = document.getElementById('lootItemTitle');
-  const lootPayoutText = document.getElementById('lootPayoutText');
-  const lootMessageText = document.getElementById('lootMessageText');
+  // Case Opening Elements
+  const caseSpinnerViewport = document.getElementById('caseSpinnerViewport');
+  const caseSpinnerTrack = document.getElementById('caseSpinnerTrack');
+  const btnOpenCase = document.getElementById('btnOpenCase');
+  const btnOpenCaseText = document.getElementById('btnOpenCaseText');
+  const caseResultCard = document.getElementById('caseResultCard');
+  const caseResultImg = document.getElementById('caseResultImg');
+  const caseResultIcon = document.getElementById('caseResultIcon');
+  const caseResultRarity = document.getElementById('caseResultRarity');
+  const caseResultPoints = document.getElementById('caseResultPoints');
+  const caseResultTitle = document.getElementById('caseResultTitle');
+  const caseResultMessage = document.getElementById('caseResultMessage');
 
   // Shop Elements
   const shopGrid = document.getElementById('shopGrid');
@@ -1473,55 +1478,211 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ---------------- LOOT BOX CRATES ----------------
+  // ---------------- CS:GO / CS2 CASE OPENING ROULETTE ----------------
+  const CS_PREVIEW_POOL = [
+    { name: 'Testing Diagnostics Log', rarity: 'mil-spec', rarityColor: '#4b69ff', category: 'Mil-Spec', icon: '📋' },
+    { name: 'QA Defect Cache', rarity: 'mil-spec', rarityColor: '#4b69ff', category: 'Mil-Spec', icon: '🗃️' },
+    { name: 'Bug Hunter Ribbon', rarity: 'mil-spec', rarityColor: '#4b69ff', category: 'Mil-Spec', icon: '🎖️' },
+    { name: 'Trait Reroll', rarity: 'restricted', rarityColor: '#8847ff', category: 'Restricted', image: '/assets/reroll.webp' },
+    { name: 'Stat Crystal', rarity: 'classified', rarityColor: '#d32ce6', category: 'Classified', image: '/assets/stat.webp' },
+    { name: 'Modifier Prism', rarity: 'classified', rarityColor: '#d32ce6', category: 'Classified', image: '/assets/modifirer.png' },
+    { name: 'Magical Leaf', rarity: 'covert', rarityColor: '#eb4b4b', category: 'Covert', image: '/assets/magicleaf.webp' },
+    { name: '★ Special Mew Trio / Brainrot Trophy', rarity: 'gold', rarityColor: '#ffd700', category: 'Special Rare', image: '/assets/special_gold.webp' }
+  ];
 
-  crateOpenButtons.forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const crateType = btn.getAttribute('data-crate');
-      const cost = crateType === 'rare' ? 75 : 25;
+  function renderCaseCard(item, isWinner = false) {
+    return `
+      <div class="case-item-card rarity-${item.rarity} ${isWinner ? 'is-target-card' : ''}">
+        <div class="case-card-img-wrap">
+          ${item.image 
+            ? `<img src="${item.image}" alt="${item.name}" class="case-card-img" />` 
+            : `<span class="case-card-icon">${item.icon || '📦'}</span>`}
+        </div>
+        <div class="case-card-info">
+          <div class="case-card-name" title="${item.name}">${item.name}</div>
+          <div class="case-card-rarity" style="color: ${item.rarityColor};">${item.category || item.rarity}</div>
+        </div>
+        <div class="case-card-stripe" style="background-color: ${item.rarityColor};"></div>
+      </div>
+    `;
+  }
 
-      if (currentUser && currentUser.balance_pts < cost) {
-        showToast('error', `Insufficient balance to open ${crateType} crate (Cost: ${cost} PTS).`);
+  function initCasePreview() {
+    if (!caseSpinnerTrack) return;
+    const previewCards = [];
+    for (let i = 0; i < 30; i++) {
+      const randItem = CS_PREVIEW_POOL[Math.floor(Math.random() * CS_PREVIEW_POOL.length)];
+      previewCards.push(renderCaseCard(randItem));
+    }
+    caseSpinnerTrack.innerHTML = previewCards.join('');
+  }
+  initCasePreview();
+
+  function playSpinTicker(durationMs) {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+
+      let startTime = performance.now();
+      let lastTick = 0;
+
+      function tickLoop(now) {
+        const elapsed = now - startTime;
+        if (elapsed >= durationMs) return;
+
+        // Decelerate ticker frequency as spin slows down
+        const progress = elapsed / durationMs;
+        const tickInterval = 65 + Math.pow(progress, 3) * 480;
+
+        if (now - lastTick >= tickInterval) {
+          lastTick = now;
+          playTickerClick(ctx, 1 - progress * 0.4);
+        }
+
+        requestAnimationFrame(tickLoop);
+      }
+
+      requestAnimationFrame(tickLoop);
+    } catch (e) {}
+  }
+
+  function playTickerClick(ctx, vol = 0.5) {
+    try {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(850, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.025);
+      gain.gain.setValueAtTime(0.04 * vol, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.025);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.025);
+    } catch (e) {}
+  }
+
+  let isCaseSpinning = false;
+
+  async function openCaseRoulette() {
+    if (isCaseSpinning) return;
+    const cost = 50;
+
+    if (currentUser && currentUser.balance_pts < cost) {
+      showToast('error', `Insufficient PTS balance (Cost: ${cost} PTS, you have ${currentUser.balance_pts} PTS).`);
+      return;
+    }
+
+    isCaseSpinning = true;
+    if (btnOpenCase) btnOpenCase.disabled = true;
+    if (btnOpenCaseText) btnOpenCaseText.textContent = 'OPENING CASE...';
+    if (caseResultCard) caseResultCard.style.display = 'none';
+
+    // Reset track position instantly without transition
+    if (caseSpinnerTrack) {
+      caseSpinnerTrack.style.transition = 'none';
+      caseSpinnerTrack.style.transform = 'translateX(0px)';
+      void caseSpinnerTrack.offsetHeight;
+    }
+
+    try {
+      const res = await fetch('/api/casino/open-case', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        showToast('error', json.error || 'Failed to open case.');
+        isCaseSpinning = false;
+        if (btnOpenCase) btnOpenCase.disabled = false;
+        if (btnOpenCaseText) btnOpenCaseText.textContent = 'UNLOCK CASE (50 PTS)';
         return;
       }
 
-      btn.disabled = true;
-      const originalText = btn.textContent;
-      btn.textContent = 'Opening crate...';
+      const tape = Array.isArray(json.tape) ? json.tape : [];
+      const winningIndex = json.winningIndex !== undefined ? json.winningIndex : 35;
+      const winner = json.winner;
 
-      try {
-        const res = await fetch('/api/lootbox/open', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ crateType })
-        });
-        const json = await res.json();
-
-        if (res.ok && json.success) {
-          currentUser.balance_pts = json.newBalance;
-          updateUserData(currentUser);
-
-          // Render result card
-          lootRarityTag.textContent = json.rarity;
-          lootRarityTag.className = `rarity-badge rarity-${json.rarity.toLowerCase()}`;
-          lootItemTitle.textContent = json.itemWon;
-          lootPayoutText.textContent = `+${json.rewardPts} PTS (Net: ${json.netDelta >= 0 ? '+' : ''}${json.netDelta})`;
-          lootMessageText.textContent = json.message;
-          lootResultCard.style.display = 'block';
-
-          lootResultCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          showToast('success', json.message);
-        } else {
-          showToast('error', json.error || 'Failed to open crate.');
-        }
-      } catch (err) {
-        showToast('error', 'Network error while opening crate.');
-      } finally {
-        btn.disabled = false;
-        btn.textContent = originalText;
+      if (caseSpinnerTrack) {
+        caseSpinnerTrack.innerHTML = tape.map((item, idx) => renderCaseCard(item, idx === winningIndex)).join('');
       }
-    });
-  });
+
+      // Calculate pixel-perfect alignment
+      const viewportWidth = caseSpinnerViewport ? caseSpinnerViewport.getBoundingClientRect().width : 780;
+      const cardWidth = 140; // 130px width + 10px margin
+      // Random jitter between -26px and +26px (within card boundaries)
+      const randomJitter = Math.floor(Math.random() * 52) - 26;
+      const targetOffset = (winningIndex * cardWidth) - (viewportWidth / 2) + (cardWidth / 2) + randomJitter;
+
+      // Animate carousel track using cubic-bezier
+      requestAnimationFrame(() => {
+        if (!caseSpinnerTrack) return;
+        caseSpinnerTrack.style.transition = 'transform 5.5s cubic-bezier(0.12, 0.8, 0.2, 1)';
+        caseSpinnerTrack.style.transform = `translateX(-${targetOffset}px)`;
+      });
+
+      // Sound ticker effect
+      playSpinTicker(5500);
+
+      // On animation complete (5.5s)
+      setTimeout(() => {
+        // Highlight winning card
+        if (caseSpinnerTrack) {
+          const cards = caseSpinnerTrack.querySelectorAll('.case-item-card');
+          if (cards[winningIndex]) {
+            cards[winningIndex].classList.add('winner-highlight');
+          }
+        }
+
+        // Update user balance
+        currentUser.balance_pts = json.newBalance;
+        updateUserData(currentUser);
+
+        // Populate result card
+        if (caseResultCard) {
+          if (winner.image) {
+            caseResultImg.src = winner.image;
+            caseResultImg.alt = winner.name;
+            caseResultImg.style.display = 'block';
+            caseResultIcon.style.display = 'none';
+          } else {
+            caseResultImg.style.display = 'none';
+            caseResultIcon.textContent = winner.icon || '📦';
+            caseResultIcon.style.display = 'block';
+          }
+
+          caseResultRarity.textContent = winner.category || winner.rarity;
+          caseResultRarity.style.backgroundColor = winner.rarityColor || '#4b69ff';
+          caseResultPoints.textContent = `+${json.rewardPts} PTS (Net: ${json.netChange >= 0 ? '+' : ''}${json.netChange})`;
+          caseResultTitle.textContent = winner.name;
+          caseResultMessage.textContent = json.message;
+
+          caseResultCard.style.display = 'block';
+          caseResultCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        showToast(winner.rarity === 'gold' ? 'success' : 'info', json.message);
+
+        isCaseSpinning = false;
+        if (btnOpenCase) btnOpenCase.disabled = false;
+        if (btnOpenCaseText) btnOpenCaseText.textContent = 'UNLOCK CASE (50 PTS)';
+      }, 5550);
+
+    } catch (err) {
+      console.error('[Case Opening Error]:', err);
+      showToast('error', 'Network error while opening case.');
+      isCaseSpinning = false;
+      if (btnOpenCase) btnOpenCase.disabled = false;
+      if (btnOpenCaseText) btnOpenCaseText.textContent = 'UNLOCK CASE (50 PTS)';
+    }
+  }
+
+  if (btnOpenCase) {
+    btnOpenCase.addEventListener('click', openCaseRoulette);
+  }
 
   // ---------------- LEAD QA PANEL ----------------
 

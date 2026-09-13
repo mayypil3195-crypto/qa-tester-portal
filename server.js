@@ -935,80 +935,204 @@ app.post('/api/casino/plinko', requireAuth, (req, res) => {
 });
 
 /**
- * Loot Box Opening Simulation (Nerfed RTP ~76% PTS Sink)
+ * CS:GO / CS2 Style Case Opening Drop Table
+ * Rarity Tiers & Weights:
+ * - Mil-Spec (Blue): ~70% total
+ * - Restricted (Purple): ~18% total
+ * - Classified (Pink): ~8% total
+ * - Covert (Red): ~3.5% total
+ * - Special Rare (Gold ★): ~0.5% total
  */
-app.post('/api/lootbox/open', requireAuth, (req, res) => {
-  try {
-    const { crateType } = req.body;
-    const type = String(crateType || '').toLowerCase().trim();
+const CASE_ITEMS = [
+  // Mil-Spec (Blue, ~70%)
+  {
+    id: 'milspec_log',
+    name: 'Testing Diagnostics Log',
+    category: 'Mil-Spec',
+    rarity: 'mil-spec',
+    rarityColor: '#4b69ff',
+    reward: 15,
+    weight: 28,
+    icon: '📋',
+    image: null
+  },
+  {
+    id: 'milspec_cache',
+    name: 'QA Defect Cache',
+    category: 'Mil-Spec',
+    rarity: 'mil-spec',
+    rarityColor: '#4b69ff',
+    reward: 20,
+    weight: 24,
+    icon: '🗃️',
+    image: null
+  },
+  {
+    id: 'milspec_badge',
+    name: 'Bug Hunter Ribbon',
+    category: 'Mil-Spec',
+    rarity: 'mil-spec',
+    rarityColor: '#4b69ff',
+    reward: 25,
+    weight: 18,
+    icon: '🎖️',
+    image: null
+  },
 
+  // Restricted (Purple, ~18%)
+  {
+    id: 'restricted_reroll',
+    name: 'Trait Reroll',
+    category: 'Restricted',
+    rarity: 'restricted',
+    rarityColor: '#8847ff',
+    reward: 50,
+    weight: 18,
+    icon: '🎲',
+    image: '/assets/reroll.webp'
+  },
+
+  // Classified (Pink, ~8%)
+  {
+    id: 'classified_stat',
+    name: 'Stat Crystal',
+    category: 'Classified',
+    rarity: 'classified',
+    rarityColor: '#d32ce6',
+    reward: 100,
+    weight: 4,
+    icon: '💎',
+    image: '/assets/stat.webp'
+  },
+  {
+    id: 'classified_prism',
+    name: 'Modifier Prism',
+    category: 'Classified',
+    rarity: 'classified',
+    rarityColor: '#d32ce6',
+    reward: 120,
+    weight: 4,
+    icon: '🔮',
+    image: '/assets/modifirer.png'
+  },
+
+  // Covert (Red, ~3.5%)
+  {
+    id: 'covert_leaf',
+    name: 'Magical Leaf',
+    category: 'Covert',
+    rarity: 'covert',
+    rarityColor: '#eb4b4b',
+    reward: 250,
+    weight: 3.5,
+    icon: '🍃',
+    image: '/assets/magicleaf.webp'
+  },
+
+  // Special Rare (Gold ★, ~0.5%)
+  {
+    id: 'special_gold_mew',
+    name: '★ Special Mew Trio / Brainrot Trophy',
+    category: 'Special Rare',
+    rarity: 'gold',
+    rarityColor: '#ffd700',
+    reward: 1000,
+    weight: 0.5,
+    icon: '🌟',
+    image: '/assets/special_gold.webp'
+  }
+];
+
+function rollCaseWinner() {
+  const totalWeight = CASE_ITEMS.reduce((sum, item) => sum + item.weight, 0);
+  let rand = Math.random() * totalWeight;
+  for (const item of CASE_ITEMS) {
+    if (rand < item.weight) return item;
+    rand -= item.weight;
+  }
+  return CASE_ITEMS[0];
+}
+
+function generateCaseTape(winner, winningIndex = 35, count = 50) {
+  const tape = [];
+  for (let i = 0; i < count; i++) {
+    if (i === winningIndex) {
+      tape.push(winner);
+    } else {
+      tape.push(rollCaseWinner());
+    }
+  }
+  return tape;
+}
+
+const CASE_OPEN_COST = 50;
+
+/**
+ * CS:GO / CS2 Style Case Opening Controller
+ */
+async function handleCaseOpening(req, res) {
+  try {
     const user = db.getUser(req.session.user.id);
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found.' });
     }
 
-    let cost = 0;
-    let pool = [];
-
-    if (type === 'standard') {
-      cost = 25;
-      pool = [
-        { weight: 60, name: 'Basic Testing Log', minPts: 5, maxPts: 12, rarity: 'Common' },
-        { weight: 25, name: 'QA Defect Cache', minPts: 15, maxPts: 22, rarity: 'Uncommon' },
-        { weight: 12, name: 'Bug Hunter Badge', minPts: 30, maxPts: 45, rarity: 'Rare' },
-        { weight: 3,  name: 'Lead Reviewer Commendation', minPts: 75, maxPts: 100, rarity: 'Jackpot' }
-      ];
-    } else if (type === 'rare') {
-      cost = 75;
-      pool = [
-        { weight: 55, name: 'Standard Component Cache', minPts: 15, maxPts: 35, rarity: 'Common' },
-        { weight: 28, name: 'Diagnostic Toolkit', minPts: 45, maxPts: 65, rarity: 'Uncommon' },
-        { weight: 13, name: 'Cybernetic Scanner', minPts: 90, maxPts: 130, rarity: 'Rare' },
-        { weight: 4,  name: 'Apex QA Trophy', minPts: 200, maxPts: 300, rarity: 'Legendary' }
-      ];
-    } else {
-      return res.status(400).json({ success: false, error: 'Invalid crate type. Must be "standard" or "rare".' });
-    }
-
+    const cost = CASE_OPEN_COST;
     if (user.balance_pts < cost) {
-      return res.status(400).json({ success: false, error: `Insufficient PTS balance for this crate (Cost: ${cost} PTS, you have ${user.balance_pts} PTS).` });
+      return res.status(400).json({
+        success: false,
+        error: `Insufficient PTS balance (Cost: ${cost} PTS, you have ${user.balance_pts} PTS).`
+      });
     }
 
-    // Roll reward item by weight
-    const totalWeight = pool.reduce((acc, i) => acc + i.weight, 0);
-    let rand = Math.random() * totalWeight;
-    let selectedItem = pool[0];
+    // Atomically deduct cost
+    db.updateBalance(user.discord_id, -cost);
 
-    for (const item of pool) {
-      if (rand < item.weight) {
-        selectedItem = item;
-        break;
-      }
-      rand -= item.weight;
+    // Roll winner and generate 50-item tape with winner strictly at index 35
+    const winner = rollCaseWinner();
+    const winningIndex = 35;
+    const tape = generateCaseTape(winner, winningIndex, 50);
+
+    // Credit reward PTS
+    db.updateBalance(user.discord_id, winner.reward);
+
+    const updatedUser = db.getUser(user.discord_id);
+    const netChange = winner.reward - cost;
+
+    // Log notable wins to Discord logs webhook
+    if (winner.rarity === 'gold' || winner.rarity === 'covert' || winner.reward >= 100) {
+      logCasinoActivity({
+        user,
+        game: 'CS2 Case Opening',
+        bet: cost,
+        multiplier: Number((winner.reward / cost).toFixed(2)),
+        payout: winner.reward,
+        netChange,
+        newBalance: updatedUser.balance_pts
+      }).catch(err => console.error('[Case Webhook Error]:', err));
     }
-
-    // Calculate random points won
-    const rewardPts = Math.floor(Math.random() * (selectedItem.maxPts - selectedItem.minPts + 1)) + selectedItem.minPts;
-    const netDelta = rewardPts - cost;
-
-    const updatedUser = db.updateBalance(user.discord_id, netDelta);
 
     return res.json({
       success: true,
-      crateType: type,
       cost,
-      rewardPts,
-      netDelta,
-      itemWon: selectedItem.name,
-      rarity: selectedItem.rarity,
+      winner,
+      tape,
+      winningIndex,
+      rewardPts: winner.reward,
+      netChange,
       newBalance: updatedUser.balance_pts,
-      message: `Opened ${type.toUpperCase()} crate! Received [${selectedItem.rarity}] ${selectedItem.name} with ${rewardPts} PTS (Net: ${netDelta >= 0 ? '+' : ''}${netDelta} PTS).`
+      message: winner.rarity === 'gold'
+        ? `🌟 JACKPOT! You unboxed the ultra-rare ${winner.name}! (+${winner.reward} PTS, Net: +${netChange} PTS)`
+        : `Unboxed [${winner.category}] ${winner.name}! (+${winner.reward} PTS, Net: ${netChange >= 0 ? '+' : ''}${netChange} PTS)`
     });
   } catch (error) {
-    console.error('[Lootbox Error]:', error);
-    return res.status(500).json({ success: false, error: error.message || 'Internal lootbox error.' });
+    console.error('[Case Opening Error]:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Internal case opening error.' });
   }
-});
+}
+
+app.post('/api/casino/open-case', requireAuth, handleCaseOpening);
+app.post('/api/lootbox/open', requireAuth, handleCaseOpening);
 
 // Full in-game shop catalog
 const SHOP_CATALOG = {
@@ -1873,5 +1997,10 @@ module.exports = {
   memberRoleCache,
   MAX_CASINO_WAGER,
   MIN_CASINO_WAGER,
-  evaluateSlotSpin
+  evaluateSlotSpin,
+  CASE_ITEMS,
+  rollCaseWinner,
+  generateCaseTape,
+  CASE_OPEN_COST,
+  handleCaseOpening
 };
