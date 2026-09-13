@@ -630,7 +630,37 @@ document.addEventListener('DOMContentLoaded', () => {
           return;
         }
 
-        inventoryTbody.innerHTML = activeItems.map(item => {
+        // Group identical items by item_id (or base item name) and status
+        const groupedMap = new Map();
+
+        for (const item of activeItems) {
+          const qtyMatch = item.item_name ? item.item_name.match(/\s*\(x(\d+)\)$/i) : null;
+          const parsedQty = qtyMatch ? parseInt(qtyMatch[1], 10) : 1;
+          const baseName = item.item_name ? item.item_name.replace(/\s*\(x\d+\)$/i, '').trim() : 'Unknown Item';
+          const keyId = item.item_id || baseName;
+          const groupKey = `${keyId}___${item.status}`;
+
+          if (!groupedMap.has(groupKey)) {
+            groupedMap.set(groupKey, {
+              id: item.id,
+              item_id: item.item_id,
+              item_name: baseName,
+              category: item.category,
+              total_price_pts: item.price_pts,
+              status: item.status,
+              created_at: item.created_at,
+              quantity: parsedQty
+            });
+          } else {
+            const existing = groupedMap.get(groupKey);
+            existing.quantity += parsedQty;
+            existing.total_price_pts += item.price_pts;
+          }
+        }
+
+        const groupedItems = Array.from(groupedMap.values());
+
+        inventoryTbody.innerHTML = groupedItems.map(item => {
           const isPending = (item.status === 'PENDING');
           const isUsable = (item.status === 'USABLE' || item.status === 'OWNED');
           let statusClass = 'status-delivered';
@@ -643,12 +673,18 @@ document.addEventListener('DOMContentLoaded', () => {
             statusText = '🔑 Usable Key';
           }
 
+          const qtyBadge = item.quantity > 1
+            ? `<span class="inventory-qty-badge">x${item.quantity}</span>`
+            : '';
+
           return `
             <tr>
               <td style="font-weight: 700; color: var(--text-muted);">#${item.id}</td>
-              <td style="font-weight: 600; color: var(--text);">${String(item.item_name).replace(/</g, '&lt;')}</td>
+              <td style="font-weight: 600; color: var(--text);">
+                ${String(item.item_name).replace(/</g, '&lt;')}${qtyBadge}
+              </td>
               <td><span style="font-size: 0.82rem; color: var(--text-muted);">${String(item.category).replace(/</g, '&lt;')}</span></td>
-              <td style="font-weight: 700; color: #7986ff;">${item.price_pts} PTS</td>
+              <td style="font-weight: 700; color: #7986ff;">${item.total_price_pts} PTS</td>
               <td><span class="status-pill ${statusClass}">${statusText}</span></td>
               <td style="font-size: 0.8rem; color: var(--text-muted);">${item.created_at || '—'}</td>
             </tr>
@@ -1966,6 +2002,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         isCaseSpinning = false;
         updateCaseKeyUI(json.remainingKeys !== undefined ? json.remainingKeys : currentUserKeys);
+        if (activeTab === 'inventory') {
+          loadUserInventory();
+        }
       }, 5550);
 
     } catch (err) {
