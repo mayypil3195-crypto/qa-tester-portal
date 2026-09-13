@@ -622,15 +622,17 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
 
       if (data.success && Array.isArray(data.inventory)) {
-        if (data.inventory.length === 0) {
+        // Only active, held items should be rendered
+        const activeItems = data.inventory.filter(item => item.status !== 'CONSUMED');
+
+        if (activeItems.length === 0) {
           inventoryTbody.innerHTML = '<tr><td colspan="6" class="table-empty">No items in your inventory yet. Visit the Shop to redeem rewards!</td></tr>';
           return;
         }
 
-        inventoryTbody.innerHTML = data.inventory.map(item => {
+        inventoryTbody.innerHTML = activeItems.map(item => {
           const isPending = (item.status === 'PENDING');
           const isUsable = (item.status === 'USABLE' || item.status === 'OWNED');
-          const isConsumed = (item.status === 'CONSUMED');
           let statusClass = 'status-delivered';
           let statusText = '✅ Delivered In-Game';
           if (isPending) {
@@ -639,9 +641,6 @@ document.addEventListener('DOMContentLoaded', () => {
           } else if (isUsable) {
             statusClass = 'status-usable';
             statusText = '🔑 Usable Key';
-          } else if (isConsumed) {
-            statusClass = 'status-consumed';
-            statusText = '⚡ Used';
           }
 
           return `

@@ -210,8 +210,7 @@ const countKeysStmt = db.prepare(`
 `);
 
 const consumeKeyStmt = db.prepare(`
-  UPDATE inventory
-  SET status = 'CONSUMED'
+  DELETE FROM inventory
   WHERE id = (
     SELECT id FROM inventory
     WHERE discord_id = ? AND item_id = ? AND status IN ('USABLE', 'OWNED')
