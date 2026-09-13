@@ -1,257 +1,96 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QA Tester Portal — Заявки на начисление PTS</title>
-  <meta name="description" content="Автономный веб-портал системы QA Tester Economy для подачи заявок на начисление PTS">
+  <title>QA Submission</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- Background Glow Accents -->
-  <div class="bg-glow-orb glow-top-left" aria-hidden="true"></div>
-  <div class="bg-glow-orb glow-bottom-right" aria-hidden="true"></div>
+  <main class="page-wrap">
+    <div class="card">
+      <header class="card-header">
+        <h1 class="card-title">QA Submission</h1>
+        <p class="card-subtitle">Submit your testing report for points verification</p>
+      </header>
 
-  <div class="app-container">
-    <!-- Header Section -->
-    <header class="app-header">
-      <div class="header-branding">
-        <div class="brand-badge-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
-          </svg>
-        </div>
-        <div class="header-titles">
-          <h1 class="portal-title">QA Tester Portal</h1>
-          <p class="portal-subtitle">Система учета активности и начисления PTS</p>
-        </div>
-      </div>
+      <div id="alertBanner" class="alert-banner" role="alert" style="display: none;"></div>
 
-      <div class="system-status-container">
-        <div id="systemStatusBadge" class="status-indicator-badge">
-          <span class="status-dot"></span>
-          <span id="statusText">Проверка системы...</span>
-        </div>
-      </div>
-    </header>
-
-    <!-- Main Card Container -->
-    <main class="main-card glass-panel">
-      <!-- Toast Alert Feedback (Inline) -->
-      <div id="feedbackAlert" class="alert-box" role="alert" style="display: none;">
-        <div class="alert-icon" id="alertIcon"></div>
-        <div class="alert-content">
-          <h4 id="alertTitle" class="alert-title"></h4>
-          <p id="alertMessage" class="alert-message"></p>
-        </div>
-        <button type="button" class="alert-dismiss" id="alertDismiss" aria-label="Закрыть">✕</button>
-      </div>
-
-      <!-- Point Request Form -->
-      <form id="pointsRequestForm" class="request-form" novalidate>
-        <div class="form-grid">
-          <!-- Username / Discord Tag -->
-          <div class="form-group">
-            <label for="username" class="form-label">
-              Имя пользователя в Discord <span class="required-star">*</span>
-            </label>
-            <div class="input-wrapper">
-              <span class="input-prefix-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-              </span>
-              <input 
-                type="text" 
-                id="username" 
-                name="username" 
-                class="form-control with-icon" 
-                placeholder="e.g. makar_dev" 
-                required 
-                autocomplete="off"
-              >
-            </div>
-            <span class="field-hint">Ваш юзернейм или никнейм на сервере разработки</span>
-          </div>
-
-          <!-- Discord Snowflake ID -->
-          <div class="form-group">
-            <label for="discord_id" class="form-label">
-              Discord User ID (Snowflake) <span class="required-star">*</span>
-            </label>
-            <div class="input-wrapper">
-              <span class="input-prefix-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-              </span>
-              <input 
-                type="text" 
-                id="discord_id" 
-                name="discord_id" 
-                class="form-control with-icon" 
-                placeholder="18-digit Discord User ID" 
-                pattern="[0-9]{17,20}" 
-                required 
-                autocomplete="off"
-              >
-            </div>
-            <span class="field-hint">
-              17–20 цифр. 
-              <button type="button" class="btn-text-helper" id="helpDiscordIdBtn">Как скопировать ID?</button>
-            </span>
-            <!-- Collapsible Discord ID Helper -->
-            <div id="discordIdHelperContent" class="helper-collapse-box" style="display: none;">
-              <ol class="helper-steps">
-                <li>Включите <strong>Режим разработчика</strong> в Discord (Настройки пользователя &gt; Дополнительно).</li>
-                <li>Кликните правой кнопкой мыши по своему аватару.</li>
-                <li>Выберите <strong>«Копировать ID пользователя»</strong> и вставьте сюда.</li>
-              </ol>
-            </div>
-          </div>
-
-          <!-- Activity Category -->
-          <div class="form-group">
-            <label for="work_type" class="form-label">
-              Категория активности <span class="required-star">*</span>
-            </label>
-            <div class="select-wrapper">
-              <select id="work_type" name="work_type" class="form-control select-control" required>
-                <option value="" disabled selected>Выберите тип выполненной задачи...</option>
-                <option value="Тест-плей баланса">🎮 Тест-плей баланса</option>
-                <option value="Поиск и воспроизведение багов">🐛 Поиск и воспроизведение багов</option>
-                <option value="Регрессионное тестирование">🔄 Регрессионное тестирование</option>
-                <option value="Написание тестовой документации">📑 Написание тестовой документации</option>
-                <option value="Особое поручение">⚡ Особое поручение лида</option>
-              </select>
-              <div class="select-arrow">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-              </div>
-            </div>
-            <span class="field-hint">Выберите направление проделанной работы</span>
-          </div>
-
-          <!-- Points Amount with Quick Presets -->
-          <div class="form-group">
-            <div class="label-with-presets">
-              <label for="points" class="form-label">
-                Запрашиваемые PTS <span class="required-star">*</span>
-              </label>
-              <div class="pts-presets" aria-label="Быстрый выбор баллов">
-                <button type="button" class="preset-btn" data-pts="10">+10</button>
-                <button type="button" class="preset-btn" data-pts="25">+25</button>
-                <button type="button" class="preset-btn" data-pts="50">+50</button>
-                <button type="button" class="preset-btn" data-pts="100">+100</button>
-              </div>
-            </div>
-            <div class="input-wrapper">
-              <span class="input-prefix-icon font-pts">PTS</span>
-              <input 
-                type="number" 
-                id="points" 
-                name="points" 
-                class="form-control with-icon" 
-                min="1" 
-                max="1000" 
-                value="10" 
-                required
-              >
-            </div>
-            <span class="field-hint">Количество баллов за выполненную задачу (от 1 до 1000)</span>
-          </div>
-        </div>
-
-        <!-- Description Textarea -->
+      <form id="submissionForm" class="submission-form" novalidate>
         <div class="form-group">
-          <div class="label-with-counter">
-            <label for="description" class="form-label">
-              Подробное описание работы и репорт <span class="required-star">*</span>
-            </label>
-            <span id="descCharCount" class="char-counter">0 символов</span>
-          </div>
+          <label for="username" class="form-label">Discord Username</label>
+          <input 
+            type="text" 
+            id="username" 
+            name="username" 
+            class="form-input" 
+            placeholder="username" 
+            required 
+            autocomplete="off"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="discord_id" class="form-label">Discord User ID</label>
+          <input 
+            type="text" 
+            id="discord_id" 
+            name="discord_id" 
+            class="form-input" 
+            placeholder="18-digit ID" 
+            pattern="[0-9]{17,20}" 
+            required 
+            autocomplete="off"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="points" class="form-label">Points Requested</label>
+          <input 
+            type="number" 
+            id="points" 
+            name="points" 
+            class="form-input" 
+            min="1" 
+            max="1000" 
+            value="10" 
+            required
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="description" class="form-label">Report Details</label>
           <textarea 
             id="description" 
             name="description" 
-            class="form-control textarea-control" 
-            placeholder="Опишите проверенные механики, шаги воспроизведения найденных багов, билд, платформу и затраченное время..." 
+            class="form-textarea" 
+            placeholder="Describe the bugs found or testing done..." 
             rows="4" 
             required
           ></textarea>
-          <span class="field-hint">Детализированный отчет позволяет лидам мгновенно верифицировать и начислить PTS</span>
         </div>
 
-        <!-- Proof URL -->
         <div class="form-group">
-          <label for="proof_url" class="form-label">
-            Ссылка на доказательства / материалы <span class="optional-tag">(опционально)</span>
-          </label>
-          <div class="input-wrapper">
-            <span class="input-prefix-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-            </span>
-            <input 
-              type="url" 
-              id="proof_url" 
-              name="proof_url" 
-              class="form-control with-icon" 
-              placeholder="https://trello.com/... or https://imgur.com/..." 
-              autocomplete="off"
-            >
-          </div>
-          <span class="field-hint">Прямая ссылка на скриншот, видеозапись тестирования или карточку в таск-трекере</span>
+          <label for="proof_url" class="form-label">Proof Link <span class="optional-label">(optional)</span></label>
+          <input 
+            type="url" 
+            id="proof_url" 
+            name="proof_url" 
+            class="form-input" 
+            placeholder="https://..." 
+            autocomplete="off"
+          >
         </div>
 
-        <!-- Submit Button Row -->
-        <div class="form-actions">
-          <button type="submit" id="submitBtn" class="btn-primary">
-            <span class="btn-spinner" id="btnSpinner" aria-hidden="true" style="display: none;"></span>
-            <span class="btn-label" id="btnLabel">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-              Отправить заявку на рассмотрение
-            </span>
-          </button>
-        </div>
-      </form>
-    </main>
-
-    <!-- Recent Submissions Transparency Monitor -->
-    <section class="recent-section glass-panel">
-      <div class="recent-header">
-        <div class="recent-title-group">
-          <h2 class="recent-title">Журнал последних заявок</h2>
-          <span class="badge-live-feed">Realtime SQLite Stream</span>
-        </div>
-        <button type="button" id="refreshFeedBtn" class="btn-refresh" title="Обновить журнал">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-          Обновить
+        <button type="submit" id="submitBtn" class="btn-submit">
+          <span id="btnText">Submit</span>
         </button>
-      </div>
-
-      <div class="table-responsive">
-        <table class="requests-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Тестер</th>
-              <th>Активность</th>
-              <th>Баллы</th>
-              <th>Статус</th>
-              <th>Дата</th>
-            </tr>
-          </thead>
-          <tbody id="requestsTableBody">
-            <tr>
-              <td colspan="6" class="table-loading-cell">Загрузка последних заявок...</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- Footer -->
-    <footer class="app-footer">
-      <p>QA Tester Economy System &bull; Production Standalone Portal &bull; SQLite WAL Edition</p>
-    </footer>
-  </div>
+      </form>
+    </div>
+  </main>
 
   <script src="app.js"></script>
 </body>

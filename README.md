@@ -1,163 +1,84 @@
-# 🎮 QA Tester Economy Portal (Standalone Web Service)
+# QA Submission Portal
 
-> Высокопроизводительный, отказоустойчивый автономный веб-сервис для приёма и обработки заявок тестировщиков на начисление PTS. Заменяет устаревшие слэш-команды и модальные окна Discord-ботов.
-
----
-
-## 🚀 Архитектура и стек технологий
-
-* **Runtime**: Node.js (v18+ LTS / v24) с модульной системой CommonJS
-* **Backend**: Express.js (REST API, валидация данных, статическая раздача активов)
-* **База данных**: SQLite via `better-sqlite3`
-  * Режим журнала **WAL** (`PRAGMA journal_mode = WAL;`) для максимальной скорости параллельного чтения и записи
-  * Внешние ключи (`PRAGMA foreign_keys = ON;`)
-  * Индексация по статусам и датам создания
-* **Discord Integration**: Discord Webhook API через нативный Node `fetch` (не требует тяжелых библиотек клиента бота)
-* **Frontend**: Современный Vanilla стек:
-  * Чистый семантический HTML5
-  * Современный адаптивный CSS3 (CSS Variables, Flexbox, Grid, стекломорфизм `backdrop-filter: blur`, анимации)
-  * Vanilla JavaScript (Fetch API, валидация форм, монитор активности, адаптивная высота полей)
+Minimal, high-performance web portal for QA testers to submit points requests, storing records in SQLite and dispatching real-time embed notifications via Discord Webhooks.
 
 ---
 
-## 📁 Структура проекта
+## Architecture & Stack
+
+- **Runtime**: Node.js (v18+ LTS / v24, CommonJS)
+- **Backend**: Express.js (REST API, static asset hosting)
+- **Database**: SQLite via `better-sqlite3` (WAL mode enabled, foreign keys ON)
+- **Discord Integration**: Discord Webhook API via native `fetch`
+- **Frontend**: Vanilla HTML5, modern CSS3 (custom properties, dark card layout), Vanilla JS
+
+---
+
+## Directory Structure
 
 ```text
 qa-tester-portal/
-├── .env.example          # Шаблон конфигурации переменных окружения
-├── .env                  # Активный конфигурационный файл
-├── database.js           # Синглтон БД SQLite (better-sqlite3, схемы, подготовленные запросы)
-├── package.json          # Зависимости и скрипты запуска
-├── server.js             # Express REST API сервер, валидация и Discord Webhook диспетчер
-├── README.md             # Документация по установке и сопровождению
-└── public/               # Клиентские статические ресурсы
-    ├── index.html        # Интерфейс подачи заявки и мониторинга
-    ├── styles.css        # Тёмная стеклянная тема (дизайн-система)
-    └── app.js            # Логика отправки, валидация, health-check
+├── .env.example          # Environment variables template
+├── .env                  # Local environment configuration
+├── database.js           # SQLite database manager
+├── package.json          # Dependencies and scripts
+├── server.js             # Express REST API & Discord webhook dispatcher
+├── README.md             # Documentation
+└── public/               # Static frontend assets
+    ├── index.html        # Minimal submission form
+    ├── styles.css        # Compact modern dark styling
+    └── app.js            # Client submission handler
 ```
 
 ---
 
-## ⚙️ Быстрый старт и запуск
+## Getting Started
 
-### 1. Установка зависимостей
+### 1. Install Dependencies
 ```bash
-cd qa-tester-portal
 npm install
 ```
 
-### 2. Конфигурация окружения
-Отредактируйте файл `.env`:
+### 2. Configure Environment
+Set `PORT` and your Discord webhook URL in `.env`:
 ```env
-# Порт сервера
 PORT=3000
-
-# Discord Webhook URL для уведомления лидов (создается в настройках канала Discord)
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 ```
 
-> **Примечание**: Если `DISCORD_WEBHOOK_URL` не указан или оставлен пустым, сервер продолжит штатно сохранять все заявки в SQLite, выводя информационное предупреждение в лог без блокировки работы пользователей.
+### 3. Start Server
+```bash
+npm start
+```
 
-### 3. Запуск веб-портала
-
-* **Стандартный запуск**:
-  ```bash
-  npm start
-  ```
-* **Режим разработки (автоперезапуск при изменениях)**:
-  ```bash
-  npm run dev
-  ```
-
-После запуска интерфейс доступен по адресу: **`http://localhost:3000`**
+Open `http://localhost:3000` in your browser.
 
 ---
 
-## 📡 Спецификация REST API
+## API Endpoints
 
 ### `POST /api/request-points`
-Создание новой заявки на начисление PTS.
+Submits a points request.
 
-**Тело запроса (JSON):**
+**Request Payload:**
 ```json
 {
-  "username": "makar_qa",
-  "discord_id": "1546968192264568883",
-  "points": 50,
-  "work_type": "Поиск и воспроизведение багов",
-  "description": "Обнаружен баг дюпа ресурсов при быстрой синхронизации сессии.",
-  "proof_url": "https://trello.com/c/sampleBugCard123"
+  "username": "username",
+  "discord_id": "123456789012345678",
+  "points": 10,
+  "description": "Describe the bugs found or testing done...",
+  "proof_url": "https://..."
 }
 ```
 
-**Правила валидации:**
-* `username`: Обязательная непустая строка.
-* `discord_id`: Discord Snowflake ID (строго 17–20 цифр, шаблон `/^\d{17,20}$/`).
-* `points`: Положительное целое число больше нуля (1–10000).
-* `work_type`: Обязательный выбор категории.
-* `description`: Обязательный отчет (минимум 5 символов).
-* `proof_url`: Валидный HTTP/HTTPS URL (опционально).
-
-**Ответ `201 Created`:**
+**Response (201 Created):**
 ```json
 {
   "success": true,
   "id": 1,
-  "message": "Заявка успешно зарегистрирована и передана на рассмотрение лидам."
+  "message": "Submitted successfully."
 }
 ```
-
----
-
-### `GET /api/requests?limit=50`
-Получение последних поступивших заявок для мониторинга и прозрачности очереди.
-
-**Ответ `200 OK`:**
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": 1,
-      "username": "makar_qa",
-      "discord_id": "1546968192264568883",
-      "points": 50,
-      "work_type": "Поиск и воспроизведение багов",
-      "description": "...",
-      "proof_url": "https://trello.com/...",
-      "status": "PENDING",
-      "created_at": "2026-09-13 10:48:42"
-    }
-  ]
-}
-```
-
----
 
 ### `GET /health`
-Проверка состояния здоровья сервиса и времени аптайма.
-
-**Ответ `200 OK`:**
-```json
-{
-  "status": "ok",
-  "uptime": 124.5,
-  "timestamp": "2026-09-13T10:48:42.081Z"
-}
-```
-
----
-
-## 🔔 Discord Webhook Embed формат
-
-При отправке заявки лиды получают стилизованный Embed в указанный канал Discord:
-* **Заголовок**: `📋 Новая заявка на начисление PTS #[id]`
-* **Цвет**: Blurple (`0x5865F2`)
-* **Поля**:
-  * `Тестер`: `<username> (<@<discord_id>>)` (inline)
-  * `Сумма PTS`: `+<points> PTS` (inline)
-  * `Тип активности`: `<work_type>` (inline)
-  * `Описание работы`: Текст репорта (с защитой от переполнения лимита Discord 1024 символа)
-  * `Доказательства`: Кликабельная ссылка `[Ссылка на материалы](<url>)` или `Не прикреплено`
-* **Footer**: `Discord ID: <discord_id> • Status: PENDING`
-* **Timestamp**: ISO-время создания
+Returns health check status and uptime.

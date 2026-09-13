@@ -37,49 +37,44 @@ async function dispatchDiscordWebhook(data, id) {
     return;
   }
 
-  const { username, discord_id, points, work_type, description, proof_url } = data;
+  const { username, discord_id, points, description, proof_url } = data;
 
-  // Discord embed character safety limits: field value max 1024
+  // Discord embed character limit safety (field max 1024)
   const formattedDescription = description.length > 1020 
     ? description.substring(0, 1017) + '...' 
     : description;
 
   const proofFieldContent = proof_url && isValidHttpUrl(proof_url)
-    ? `[Ссылка на материалы](${proof_url})`
-    : 'Не прикреплено';
+    ? `[Link](${proof_url})`
+    : 'None provided';
 
   const embed = {
-    title: `📋 Новая заявка на начисление PTS #${id}`,
-    color: 0x5865f2, // Discord Blurple
+    title: `📋 QA Points Request #${id}`,
+    color: 0x5865f2,
     fields: [
       {
-        name: 'Тестер',
+        name: 'Tester',
         value: `${username} (<@${discord_id}>)`,
         inline: true
       },
       {
-        name: 'Сумма PTS',
+        name: 'Points Requested',
         value: `+${points} PTS`,
         inline: true
       },
       {
-        name: 'Тип активности',
-        value: work_type,
-        inline: true
-      },
-      {
-        name: 'Описание работы',
+        name: 'Report',
         value: formattedDescription,
         inline: false
       },
       {
-        name: 'Доказательства',
+        name: 'Proof',
         value: proofFieldContent,
         inline: false
       }
     ],
     footer: {
-      text: `Discord ID: ${discord_id} • Status: PENDING`
+      text: `User ID: ${discord_id}`
     },
     timestamp: new Date().toISOString()
   };
@@ -120,7 +115,7 @@ app.get('/health', (req, res) => {
 });
 
 /**
- * Query recent submissions for monitoring
+ * Query recent submissions
  */
 app.get('/api/requests', (req, res) => {
   try {
@@ -150,33 +145,26 @@ app.post('/api/request-points', async (req, res) => {
 
     // Username validation
     if (!username || typeof username !== 'string' || !username.trim()) {
-      errors.push('Поле "Имя пользователя / тег" обязательно для заполнения.');
+      errors.push('Discord username is required.');
     }
 
     // Discord ID validation (Snowflake format: 17 to 20 digits)
     const sanitizedDiscordId = discord_id ? String(discord_id).trim() : '';
     if (!sanitizedDiscordId || !/^\d{17,20}$/.test(sanitizedDiscordId)) {
-      errors.push('Некорректный Discord ID. Он должен состоять из 17-20 цифр (например, 1533076808902119495).');
+      errors.push('Discord User ID must be a 17-20 digit number.');
     }
 
-    // Points validation
+    // Points validation (1 to 1000)
     const parsedPoints = Number(points);
-    if (!Number.isInteger(parsedPoints) || parsedPoints <= 0) {
-      errors.push('Количество PTS должно быть положительным целым числом больше нуля.');
-    } else if (parsedPoints > 10000) {
-      errors.push('Максимальный лимит за одну заявку — 10,000 PTS.');
-    }
-
-    // Work type validation
-    if (!work_type || typeof work_type !== 'string' || !work_type.trim()) {
-      errors.push('Выберите категорию выполненной активности.');
+    if (!Number.isInteger(parsedPoints) || parsedPoints < 1 || parsedPoints > 1000) {
+      errors.push('Points requested must be a positive integer between 1 and 1000.');
     }
 
     // Description validation
     if (!description || typeof description !== 'string' || !description.trim()) {
-      errors.push('Описание работы обязательно и должно содержать подробный отчет.');
+      errors.push('Report details are required (minimum 5 characters).');
     } else if (description.trim().length < 5) {
-      errors.push('Описание работы слишком короткое (минимум 5 символов).');
+      errors.push('Report details are too short (minimum 5 characters).');
     }
 
     // Proof URL validation (optional, but must be valid URL if provided)
@@ -184,7 +172,7 @@ app.post('/api/request-points', async (req, res) => {
     if (proof_url && typeof proof_url === 'string' && proof_url.trim().length > 0) {
       const trimmedUrl = proof_url.trim();
       if (!isValidHttpUrl(trimmedUrl)) {
-        errors.push('Ссылка на доказательства должна быть корректным URL-адресом (начинаться с http:// или https://).');
+        errors.push('Proof link must be a valid HTTP or HTTPS URL.');
       } else {
         sanitizedProofUrl = trimmedUrl;
       }
@@ -198,11 +186,16 @@ app.post('/api/request-points', async (req, res) => {
       });
     }
 
+    // Default fallback for work_type to maintain SQLite schema compatibility
+    const sanitizedWorkType = (work_type && typeof work_type === 'string' && work_type.trim().length > 0)
+      ? work_type.trim()
+      : 'General Testing';
+
     const payload = {
       username: username.trim(),
       discord_id: sanitizedDiscordId,
       points: parsedPoints,
-      work_type: work_type.trim(),
+      work_type: sanitizedWorkType,
       description: description.trim(),
       proof_url: sanitizedProofUrl
     };
@@ -210,7 +203,7 @@ app.post('/api/request-points', async (req, res) => {
     // Store in SQLite
     const newId = db.createRequest(payload);
 
-    // Asynchronously dispatch Discord Webhook notification without blocking API response
+    // Asynchronously dispatch Discord Webhook notification
     dispatchDiscordWebhook(payload, newId).catch(err => {
       console.error('[Async Webhook Dispatch Error]:', err);
     });
@@ -218,22 +211,22 @@ app.post('/api/request-points', async (req, res) => {
     return res.status(201).json({
       success: true,
       id: Number(newId),
-      message: 'Заявка успешно зарегистрирована и передана на рассмотрение лидам.'
+      message: 'Submitted successfully.'
     });
   } catch (error) {
     console.error('[API Error /api/request-points]:', error);
     return res.status(500).json({
       success: false,
-      error: 'Внутренняя ошибка сервера при обработке заявки.'
+      error: 'Internal server error while processing request.'
     });
   }
 });
 
 // Start listening
 const server = app.listen(PORT, () => {
-  console.log(`[QA Tester Portal] Server running on http://localhost:${PORT}`);
-  console.log(`[QA Tester Portal] Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`[QA Tester Portal] Webhook configured: ${Boolean(DISCORD_WEBHOOK_URL && !DISCORD_WEBHOOK_URL.includes('your_webhook_id'))}`);
+  console.log(`[QA Portal] Server running on port ${PORT}`);
+  console.log(`[QA Portal] Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`[QA Portal] Webhook configured: ${Boolean(DISCORD_WEBHOOK_URL && !DISCORD_WEBHOOK_URL.includes('your_webhook_id'))}`);
 });
 
 // Graceful shutdown handling
@@ -250,9 +243,8 @@ function handleShutdown(signal) {
     process.exit(0);
   });
 
-  // Force close if graceful termination stalls
   setTimeout(() => {
-    console.error('[Process] Forcefully terminating process after timeout.');
+    console.error('[Process] Force termination timeout.');
     process.exit(1);
   }, 5000).unref();
 }

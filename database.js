@@ -74,7 +74,7 @@ function createRequest({ username, discord_id, points, work_type, description, p
     username: String(username).trim(),
     discord_id: String(discord_id).trim(),
     points: parseInt(points, 10),
-    work_type: String(work_type).trim(),
+    work_type: work_type && String(work_type).trim().length > 0 ? String(work_type).trim() : 'General Testing',
     description: String(description).trim(),
     proof_url: proof_url && String(proof_url).trim().length > 0 ? String(proof_url).trim() : null
   });
