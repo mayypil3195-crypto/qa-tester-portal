@@ -336,11 +336,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     shopGrid.innerHTML = filtered.map(item => `
-      <div class="card shop-card" data-category="${item.category}">
-        <div class="shop-art-slot">
-          <span class="shop-art-icon">${item.icon || '📦'}</span>
-          <span class="art-slot-tag">Art Asset Pending</span>
-        </div>
+      <div class="card shop-card shop-item-card" data-category="${item.category}">
+        ${item.image ? `
+          <img src="${item.image}" alt="${item.name}" class="shop-item-img" loading="lazy" onerror="this.onerror=null; this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
+          <div class="shop-art-slot" style="display: none;">
+            <span class="shop-art-icon">${item.icon || '📦'}</span>
+          </div>
+        ` : `
+          <div class="shop-art-slot">
+            <span class="shop-art-icon">${item.icon || '📦'}</span>
+          </div>
+        `}
         <div class="shop-item-header">
           <h3 class="shop-item-name">${item.name}</h3>
           <span class="shop-badge ${getBadgeClass(item)}">${item.badge || item.category}</span>

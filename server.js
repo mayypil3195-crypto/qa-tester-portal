@@ -1020,7 +1020,8 @@ const SHOP_CATALOG = {
     category: 'Consumables',
     badge: 'Consumable',
     desc: 'Reroll unit traits in-game to optimize combat synergies.',
-    icon: '🎲'
+    icon: '🎲',
+    image: '/assets/reroll.webp'
   },
   'modifier-prism': {
     id: 'modifier-prism',
@@ -1029,7 +1030,8 @@ const SHOP_CATALOG = {
     category: 'Consumables',
     badge: 'Enhancement',
     desc: 'Alter special unit modifiers and awaken hidden abilities.',
-    icon: '🔮'
+    icon: '🔮',
+    image: '/assets/modifirer.png'
   },
   'stat-crystal': {
     id: 'stat-crystal',
@@ -1038,7 +1040,8 @@ const SHOP_CATALOG = {
     category: 'Consumables',
     badge: 'Upgrade',
     desc: 'Permanently boost base unit attack and defense stats.',
-    icon: '💎'
+    icon: '💎',
+    image: '/assets/stat.webp'
   },
   'magical-leaf': {
     id: 'magical-leaf',
@@ -1047,7 +1050,8 @@ const SHOP_CATALOG = {
     category: 'Consumables',
     badge: 'Material',
     desc: 'Rare evolution catalyst required for high-tier unit ascensions.',
-    icon: '🍃'
+    icon: '🍃',
+    image: '/assets/magicleaf.webp'
   },
 
   // Units & Rarities
