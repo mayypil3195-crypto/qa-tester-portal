@@ -231,86 +231,138 @@
         </div>
       </section>
 
-      <!-- View 5: Casino 3-Reel Slot Machine -->
+      <!-- View 5: Casino (Dual Mode: Slots & Plinko) -->
       <section id="viewCasino" class="view-panel" style="display: none;">
-        <div class="slot-container card">
-          <header class="card-header text-center">
-            <h2 class="card-title">Lucky 3-Reel Slots</h2>
-            <p class="card-subtitle">Spin the reels and line up symbols to win up to 77x your bet!</p>
-          </header>
+        <!-- Casino Sub-Navigation Mode Selector -->
+        <div class="casino-mode-bar">
+          <button type="button" class="casino-mode-btn active" data-casino-mode="slots">
+            🎰 3-Reel Slots
+          </button>
+          <button type="button" class="casino-mode-btn" data-casino-mode="plinko">
+            🟢 Plinko Arcade
+          </button>
+        </div>
 
-          <!-- Slot Machine Visual Housing -->
-          <div class="slot-cabinet">
-            <div class="slot-screen">
-              <div class="reel-box">
-                <div class="reel-window">
-                  <div class="reel-strip" id="reel0">🍒</div>
-                </div>
-                <div class="reel-window">
-                  <div class="reel-strip" id="reel1">🍋</div>
-                </div>
-                <div class="reel-window">
-                  <div class="reel-strip" id="reel2">7️⃣</div>
-                </div>
-              </div>
-              <div class="payline-marker"></div>
-            </div>
+        <!-- Mode 1: 3-Reel Slots Container (Preserved) -->
+        <div id="casinoSlotsContainer">
+          <div class="slot-container card">
+            <header class="card-header text-center">
+              <h2 class="card-title">Lucky 3-Reel Slots</h2>
+              <p class="card-subtitle">Spin the reels and line up symbols to win up to 77x your bet!</p>
+            </header>
 
-            <div id="slotStatusBanner" class="slot-status-banner">Select your wager and click SPIN to play!</div>
-
-            <!-- Controls -->
-            <div class="slot-controls">
-              <div class="bet-controls">
-                <label for="slotBetInput" class="form-label">Wager Amount (PTS)</label>
-                <div class="input-with-presets">
-                  <input type="number" id="slotBetInput" class="form-input" min="1" max="10000" value="10">
-                  <div class="quick-bets">
-                    <button type="button" class="bet-preset slot-preset" data-bet="10">10 PTS</button>
-                    <button type="button" class="bet-preset slot-preset" data-bet="25">25 PTS</button>
-                    <button type="button" class="bet-preset slot-preset" data-bet="50">50 PTS</button>
-                    <button type="button" class="bet-preset slot-preset" data-bet="100">100 PTS</button>
-                    <button type="button" class="bet-preset" id="btnMaxBet">Max</button>
+            <!-- Slot Machine Visual Housing -->
+            <div class="slot-cabinet">
+              <div class="slot-screen">
+                <div class="reel-box">
+                  <div class="reel-window">
+                    <div class="reel-strip" id="reel0">🍒</div>
+                  </div>
+                  <div class="reel-window">
+                    <div class="reel-strip" id="reel1">🍋</div>
+                  </div>
+                  <div class="reel-window">
+                    <div class="reel-strip" id="reel2">7️⃣</div>
                   </div>
                 </div>
+                <div class="payline-marker"></div>
               </div>
 
-              <button type="button" id="btnSpin" class="btn-spin">
-                <span id="btnSpinText">SPIN</span>
-              </button>
+              <div id="slotStatusBanner" class="slot-status-banner">Select your wager and click SPIN to play!</div>
+
+              <!-- Controls -->
+              <div class="slot-controls">
+                <div class="bet-controls">
+                  <label for="slotBetInput" class="form-label">Wager Amount (PTS)</label>
+                  <div class="input-with-presets">
+                    <input type="number" id="slotBetInput" class="form-input" min="1" max="10000" value="10">
+                    <div class="quick-bets">
+                      <button type="button" class="bet-preset slot-preset" data-bet="10">10 PTS</button>
+                      <button type="button" class="bet-preset slot-preset" data-bet="25">25 PTS</button>
+                      <button type="button" class="bet-preset slot-preset" data-bet="50">50 PTS</button>
+                      <button type="button" class="bet-preset slot-preset" data-bet="100">100 PTS</button>
+                      <button type="button" class="bet-preset" id="btnMaxBet">Max</button>
+                    </div>
+                  </div>
+                </div>
+
+                <button type="button" id="btnSpin" class="btn-spin">
+                  <span id="btnSpinText">SPIN</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Paytable Cheat Sheet -->
+            <div class="paytable-card">
+              <h3 class="paytable-title">Paytable & Multipliers</h3>
+              <div class="paytable-grid">
+                <div class="pay-item">
+                  <span class="pay-syms">🍒🍒 Any Two</span>
+                  <span class="pay-mult">1.5x</span>
+                </div>
+                <div class="pay-item">
+                  <span class="pay-syms">🍒🍒🍒 3 Cherries</span>
+                  <span class="pay-mult">3x</span>
+                </div>
+                <div class="pay-item">
+                  <span class="pay-syms">🍋🍋🍋 3 Lemons</span>
+                  <span class="pay-mult">5x</span>
+                </div>
+                <div class="pay-item">
+                  <span class="pay-syms">🍇🍇🍇 3 Grapes</span>
+                  <span class="pay-mult">8x</span>
+                </div>
+                <div class="pay-item">
+                  <span class="pay-syms">🔔🔔🔔 3 Bells</span>
+                  <span class="pay-mult">15x</span>
+                </div>
+                <div class="pay-item">
+                  <span class="pay-syms">💎💎💎 3 Diamonds</span>
+                  <span class="pay-mult">30x</span>
+                </div>
+                <div class="pay-item jackpot-pay">
+                  <span class="pay-syms">7️⃣7️⃣7️⃣ Jackpot</span>
+                  <span class="pay-mult">77x</span>
+                </div>
+              </div>
             </div>
           </div>
+        </div>
 
-          <!-- Paytable Cheat Sheet -->
-          <div class="paytable-card">
-            <h3 class="paytable-title">Paytable & Multipliers</h3>
-            <div class="paytable-grid">
-              <div class="pay-item">
-                <span class="pay-syms">🍒🍒 Any Two</span>
-                <span class="pay-mult">1.5x</span>
+        <!-- Mode 2: Plinko Arcade Container -->
+        <div id="casinoPlinkoContainer" style="display: none;">
+          <div class="slot-container card">
+            <header class="card-header text-center">
+              <h2 class="card-title">Plinko Arcade</h2>
+              <p class="card-subtitle">Drop the ball through 11 peg rows to hit up to 24x multiplier buckets!</p>
+            </header>
+
+            <div class="plinko-cabinet">
+              <div class="plinko-canvas-wrap">
+                <canvas id="plinkoCanvas" width="520" height="580" class="plinko-canvas"></canvas>
               </div>
-              <div class="pay-item">
-                <span class="pay-syms">🍒🍒🍒 3 Cherries</span>
-                <span class="pay-mult">3x</span>
-              </div>
-              <div class="pay-item">
-                <span class="pay-syms">🍋🍋🍋 3 Lemons</span>
-                <span class="pay-mult">5x</span>
-              </div>
-              <div class="pay-item">
-                <span class="pay-syms">🍇🍇🍇 3 Grapes</span>
-                <span class="pay-mult">8x</span>
-              </div>
-              <div class="pay-item">
-                <span class="pay-syms">🔔🔔🔔 3 Bells</span>
-                <span class="pay-mult">15x</span>
-              </div>
-              <div class="pay-item">
-                <span class="pay-syms">💎💎💎 3 Diamonds</span>
-                <span class="pay-mult">30x</span>
-              </div>
-              <div class="pay-item jackpot-pay">
-                <span class="pay-syms">7️⃣7️⃣7️⃣ Jackpot</span>
-                <span class="pay-mult">77x</span>
+
+              <div id="plinkoStatusBanner" class="slot-status-banner">Select your wager and click DROP BALL to play!</div>
+
+              <!-- Controls -->
+              <div class="slot-controls">
+                <div class="bet-controls">
+                  <label for="plinkoBetInput" class="form-label">Wager Amount (PTS)</label>
+                  <div class="input-with-presets">
+                    <input type="number" id="plinkoBetInput" class="form-input" min="1" max="10000" value="10">
+                    <div class="quick-bets">
+                      <button type="button" class="bet-preset plinko-preset" data-bet="10">10 PTS</button>
+                      <button type="button" class="bet-preset plinko-preset" data-bet="25">25 PTS</button>
+                      <button type="button" class="bet-preset plinko-preset" data-bet="50">50 PTS</button>
+                      <button type="button" class="bet-preset plinko-preset" data-bet="100">100 PTS</button>
+                      <button type="button" class="bet-preset" id="btnMaxPlinkoBet">Max</button>
+                    </div>
+                  </div>
+                </div>
+
+                <button type="button" id="btnDropBall" class="btn-spin btn-plinko-drop">
+                  <span id="btnDropBallText">DROP BALL</span>
+                </button>
               </div>
             </div>
           </div>

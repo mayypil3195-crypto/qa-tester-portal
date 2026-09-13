@@ -624,6 +624,74 @@ app.post('/api/casino/coinflip', requireAuth, (req, res) => {
 });
 
 /**
+ * Plinko Arcade Mini-Game (11 Rows, 12 Buckets)
+ */
+app.post('/api/casino/plinko', requireAuth, (req, res) => {
+  try {
+    const { bet } = req.body;
+    const betAmount = parseInt(bet, 10);
+
+    if (isNaN(betAmount) || betAmount <= 0) {
+      return res.status(400).json({ success: false, error: 'Bet must be a positive integer.' });
+    }
+
+    const user = db.getUser(req.session.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+
+    if (user.balance_pts < betAmount) {
+      return res.status(400).json({
+        success: false,
+        error: `Insufficient PTS balance (You have ${user.balance_pts} PTS).`
+      });
+    }
+
+    // Deduct wager atomically from balance
+    db.updateBalance(user.discord_id, -betAmount);
+
+    // 11 Rows of pegs -> 11 deflections (0 = left, 1 = right) -> 12 buckets
+    const rows = 11;
+    const path = [];
+    let rightTurns = 0;
+    for (let i = 0; i < rows; i++) {
+      const step = Math.random() < 0.5 ? 0 : 1;
+      path.push(step);
+      if (step === 1) rightTurns++;
+    }
+
+    const slotIndex = rightTurns; // 0 to 11
+    const multipliers = [24, 6, 2.8, 1.2, 0.5, 0.2, 0.2, 0.5, 1.2, 2.8, 6, 24];
+    const multiplier = multipliers[slotIndex];
+    const payout = Math.floor(betAmount * multiplier);
+
+    if (payout > 0) {
+      db.updateBalance(user.discord_id, payout);
+    }
+
+    const updatedUser = db.getUser(user.discord_id);
+    const netChange = payout - betAmount;
+
+    return res.json({
+      success: true,
+      bet: betAmount,
+      slotIndex,
+      multiplier,
+      payout,
+      path,
+      netChange,
+      newBalance: updatedUser.balance_pts,
+      message: multiplier >= 1.0
+        ? `🟢 Plinko landed in ${multiplier}x bucket! Won +${payout} PTS (Net: ${netChange >= 0 ? '+' : ''}${netChange} PTS)!`
+        : `Plinko landed in ${multiplier}x bucket. Returned ${payout} PTS (Net: ${netChange} PTS).`
+    });
+  } catch (error) {
+    console.error('[Plinko Error]:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Internal Plinko error.' });
+  }
+});
+
+/**
  * Loot Box Opening Simulation (Nerfed RTP ~76% PTS Sink)
  */
 app.post('/api/lootbox/open', requireAuth, (req, res) => {

@@ -55,10 +55,24 @@ document.addEventListener('DOMContentLoaded', () => {
   ];
   const slotBetInput = document.getElementById('slotBetInput');
   const slotStatusBanner = document.getElementById('slotStatusBanner');
-  const betPresets = document.querySelectorAll('.bet-preset');
+  const slotPresets = document.querySelectorAll('.slot-preset');
   const btnMaxBet = document.getElementById('btnMaxBet');
   const btnSpin = document.getElementById('btnSpin');
   const btnSpinText = document.getElementById('btnSpinText');
+
+  // Casino Dual-Mode & Plinko Elements
+  const casinoModeBtns = document.querySelectorAll('.casino-mode-btn');
+  const casinoSlotsContainer = document.getElementById('casinoSlotsContainer');
+  const casinoPlinkoContainer = document.getElementById('casinoPlinkoContainer');
+  let currentCasinoMode = 'slots';
+
+  const plinkoCanvas = document.getElementById('plinkoCanvas');
+  const plinkoStatusBanner = document.getElementById('plinkoStatusBanner');
+  const plinkoBetInput = document.getElementById('plinkoBetInput');
+  const plinkoPresets = document.querySelectorAll('.plinko-preset');
+  const btnMaxPlinkoBet = document.getElementById('btnMaxPlinkoBet');
+  const btnDropBall = document.getElementById('btnDropBall');
+  const btnDropBallText = document.getElementById('btnDropBallText');
 
   // Lootbox Elements
   const crateOpenButtons = document.querySelectorAll('.btn-open-crate');
@@ -136,9 +150,12 @@ document.addEventListener('DOMContentLoaded', () => {
     submitUsername.value = user.username;
     submitDiscordId.value = user.discord_id;
 
-    // Cap slot bet if needed
+    // Cap slot and plinko bets if needed
     if (slotBetInput && parseInt(slotBetInput.value, 10) > user.balance_pts) {
       slotBetInput.value = Math.max(1, user.balance_pts);
+    }
+    if (plinkoBetInput && parseInt(plinkoBetInput.value, 10) > user.balance_pts) {
+      plinkoBetInput.value = Math.max(1, user.balance_pts);
     }
   }
 
@@ -168,6 +185,8 @@ document.addEventListener('DOMContentLoaded', () => {
       loadShopCatalog();
     } else if (tabName === 'admin') {
       loadAdminData();
+    } else if (tabName === 'casino' && currentCasinoMode === 'plinko') {
+      initPlinkoCanvas();
     }
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -456,7 +475,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const SLOT_SYMBOLS = ['🍒', '🍋', '🍇', '🔔', '💎', '7️⃣'];
 
-  betPresets.forEach(preset => {
+  slotPresets.forEach(preset => {
     preset.addEventListener('click', () => {
       const betVal = parseInt(preset.getAttribute('data-bet'), 10);
       if (!isNaN(betVal) && slotBetInput) {
@@ -586,6 +605,557 @@ document.addEventListener('DOMContentLoaded', () => {
         isSpinning = false;
         btnSpin.disabled = false;
         btnSpinText.textContent = 'SPIN';
+      }
+    });
+  }
+
+  // ---------------- CASINO MODE SELECTOR & PLINKO ARCADE ----------------
+
+  // Mode switching (3-Reel Slots <-> Plinko Arcade)
+  casinoModeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.getAttribute('data-casino-mode');
+      if (mode === currentCasinoMode) return;
+      currentCasinoMode = mode;
+
+      casinoModeBtns.forEach(b => b.classList.toggle('active', b === btn));
+
+      if (mode === 'slots') {
+        if (casinoSlotsContainer) casinoSlotsContainer.style.display = 'block';
+        if (casinoPlinkoContainer) casinoPlinkoContainer.style.display = 'none';
+      } else {
+        if (casinoSlotsContainer) casinoSlotsContainer.style.display = 'none';
+        if (casinoPlinkoContainer) casinoPlinkoContainer.style.display = 'block';
+        initPlinkoCanvas();
+      }
+    });
+  });
+
+  // Plinko Bet Presets
+  plinkoPresets.forEach(preset => {
+    preset.addEventListener('click', () => {
+      const betVal = parseInt(preset.getAttribute('data-bet'), 10);
+      if (!isNaN(betVal) && plinkoBetInput) {
+        plinkoBetInput.value = betVal;
+      }
+    });
+  });
+
+  if (btnMaxPlinkoBet && plinkoBetInput) {
+    btnMaxPlinkoBet.addEventListener('click', () => {
+      plinkoBetInput.value = currentUser ? Math.max(1, currentUser.balance_pts) : 10;
+    });
+  }
+
+  // Plinko Canvas Engine (11 Rows, 12 Buckets)
+  const PLINKO = {
+    w: 520,
+    h: 580,
+    rows: 11,
+    buckets: 12,
+    dx: 38,
+    dy: 36,
+    pegStartY: 65,
+    pegRadius: 4.5,
+    ballRadius: 7,
+    bucketY: 492,
+    bucketH: 46,
+    bucketW: 34,
+    multipliers: [24, 6, 2.8, 1.2, 0.5, 0.2, 0.2, 0.5, 1.2, 2.8, 6, 24],
+    bucketColors: [
+      { border: '#ef4444', bg: 'rgba(239, 68, 68, 0.22)', text: '#ffffff', glow: 'rgba(239, 68, 68, 0.65)' },
+      { border: '#f97316', bg: 'rgba(249, 115, 22, 0.22)', text: '#ffffff', glow: 'rgba(249, 115, 22, 0.65)' },
+      { border: '#eab308', bg: 'rgba(234, 179, 8, 0.24)', text: '#ffffff', glow: 'rgba(234, 179, 8, 0.65)' },
+      { border: '#22c55e', bg: 'rgba(34, 197, 94, 0.22)', text: '#ffffff', glow: 'rgba(34, 197, 94, 0.65)' },
+      { border: '#3b82f6', bg: 'rgba(59, 130, 246, 0.22)', text: '#ffffff', glow: 'rgba(59, 130, 246, 0.65)' },
+      { border: '#64748b', bg: 'rgba(100, 116, 139, 0.22)', text: '#cbd5e1', glow: 'rgba(100, 116, 139, 0.65)' },
+      { border: '#64748b', bg: 'rgba(100, 116, 139, 0.22)', text: '#cbd5e1', glow: 'rgba(100, 116, 139, 0.65)' },
+      { border: '#3b82f6', bg: 'rgba(59, 130, 246, 0.22)', text: '#ffffff', glow: 'rgba(59, 130, 246, 0.65)' },
+      { border: '#22c55e', bg: 'rgba(34, 197, 94, 0.22)', text: '#ffffff', glow: 'rgba(34, 197, 94, 0.65)' },
+      { border: '#eab308', bg: 'rgba(234, 179, 8, 0.24)', text: '#ffffff', glow: 'rgba(234, 179, 8, 0.65)' },
+      { border: '#f97316', bg: 'rgba(249, 115, 22, 0.22)', text: '#ffffff', glow: 'rgba(249, 115, 22, 0.65)' },
+      { border: '#ef4444', bg: 'rgba(239, 68, 68, 0.22)', text: '#ffffff', glow: 'rgba(239, 68, 68, 0.65)' },
+    ]
+  };
+
+  let plinkoCtx = null;
+  let isPlinkoDropping = false;
+  let activePlinkoBall = null;
+  let pegPulses = [];
+  let plinkoParticles = [];
+  let activeBucketHit = null;
+
+  function roundRect(ctx, x, y, width, height, radius) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
+  }
+
+  function getPegPos(r, i) {
+    const x = 260 - (r * PLINKO.dx) / 2 + i * PLINKO.dx;
+    const y = PLINKO.pegStartY + r * PLINKO.dy;
+    return { x, y };
+  }
+
+  function setupPlinkoCanvas() {
+    if (!plinkoCanvas) return null;
+    const dpr = window.devicePixelRatio || 1;
+    plinkoCanvas.width = PLINKO.w * dpr;
+    plinkoCanvas.height = PLINKO.h * dpr;
+    plinkoCanvas.style.width = `${PLINKO.w}px`;
+    plinkoCanvas.style.height = `${PLINKO.h}px`;
+    const ctx = plinkoCanvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return ctx;
+  }
+
+  function drawPlinkoBoard(ctx) {
+    if (!ctx) return;
+
+    // Clear board
+    ctx.clearRect(0, 0, PLINKO.w, PLINKO.h);
+
+    // Background radial glow
+    const bgGrad = ctx.createRadialGradient(260, 120, 20, 260, 290, 380);
+    bgGrad.addColorStop(0, '#0e1628');
+    bgGrad.addColorStop(0.6, '#080c16');
+    bgGrad.addColorStop(1, '#05070c');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, PLINKO.w, PLINKO.h);
+
+    // Drop funnel marker
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(234, 12);
+    ctx.lineTo(252, 36);
+    ctx.lineTo(252, 46);
+    ctx.moveTo(286, 12);
+    ctx.lineTo(268, 36);
+    ctx.lineTo(268, 46);
+    ctx.stroke();
+
+    // Side deflector bumpers
+    ctx.fillStyle = '#141d2e';
+    ctx.strokeStyle = '#223048';
+    ctx.lineWidth = 1.5;
+
+    // Left bumper
+    ctx.beginPath();
+    ctx.moveTo(10, 160);
+    ctx.lineTo(34, 250);
+    ctx.lineTo(34, 370);
+    ctx.lineTo(10, 450);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Right bumper
+    ctx.beginPath();
+    ctx.moveTo(510, 160);
+    ctx.lineTo(486, 250);
+    ctx.lineTo(486, 370);
+    ctx.lineTo(510, 450);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Peg grid (11 rows, apex at row 0)
+    for (let r = 0; r < PLINKO.rows; r++) {
+      for (let i = 0; i <= r; i++) {
+        const { x, y } = getPegPos(r, i);
+
+        // Soft outer halo
+        ctx.beginPath();
+        ctx.arc(x, y, 7.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.08)';
+        ctx.fill();
+
+        // Peg core
+        ctx.beginPath();
+        ctx.arc(x, y, PLINKO.pegRadius, 0, Math.PI * 2);
+        ctx.fillStyle = '#e2e8f0';
+        ctx.fill();
+
+        // Shiny specular reflection dot
+        ctx.beginPath();
+        ctx.arc(x - 1.2, y - 1.2, 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+      }
+    }
+
+    // Divider pins above buckets
+    for (let b = 0; b < 11; b++) {
+      const pinX = 70 + b * PLINKO.dx;
+      ctx.beginPath();
+      ctx.arc(pinX, 486, 3, 0, Math.PI * 2);
+      ctx.fillStyle = '#64748b';
+      ctx.fill();
+    }
+
+    // 12 Multiplier Buckets
+    for (let b = 0; b < PLINKO.buckets; b++) {
+      const bx = 34 + b * PLINKO.dx;
+      const by = PLINKO.bucketY;
+      const bw = PLINKO.bucketW;
+      const bh = PLINKO.bucketH;
+      const mult = PLINKO.multipliers[b];
+      const style = PLINKO.bucketColors[b];
+      const isHit = activeBucketHit && activeBucketHit.index === b;
+
+      ctx.save();
+      if (isHit) {
+        ctx.shadowColor = style.border;
+        ctx.shadowBlur = 20;
+      }
+
+      // Slot body
+      roundRect(ctx, bx, by, bw, bh, 6);
+      ctx.fillStyle = isHit ? style.glow : style.bg;
+      ctx.fill();
+      ctx.strokeStyle = isHit ? '#ffffff' : style.border;
+      ctx.lineWidth = isHit ? 2.5 : 1.5;
+      ctx.stroke();
+
+      // Top notch bar
+      ctx.fillStyle = isHit ? '#ffffff' : style.border;
+      ctx.fillRect(bx + 4, by, bw - 8, 2);
+
+      // Label text
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = isHit ? '#ffffff' : style.text;
+      ctx.font = 'bold 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${mult}x`, bx + bw / 2, by + bh / 2 + 1);
+
+      ctx.restore();
+    }
+
+    // Active Peg Pulses
+    for (let i = pegPulses.length - 1; i >= 0; i--) {
+      const p = pegPulses[i];
+      p.r += 0.8;
+      p.alpha -= 0.045;
+      if (p.alpha <= 0) {
+        pegPulses.splice(i, 1);
+        continue;
+      }
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(56, 189, 248, ${p.alpha})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    // Active Particles (Collision Sparks & Win Confetti)
+    for (let i = plinkoParticles.length - 1; i >= 0; i--) {
+      const pt = plinkoParticles[i];
+      pt.x += pt.vx;
+      pt.y += pt.vy;
+      pt.vy += 0.14; // Gravity
+      pt.alpha -= pt.decay || 0.025;
+      if (pt.alpha <= 0) {
+        plinkoParticles.splice(i, 1);
+        continue;
+      }
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, pt.size || 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = pt.color.replace(')', `, ${pt.alpha})`).replace('rgb', 'rgba');
+      ctx.fill();
+    }
+
+    // Bucket Hit Decay
+    if (activeBucketHit) {
+      activeBucketHit.timer--;
+      if (activeBucketHit.timer <= 0) {
+        activeBucketHit = null;
+      }
+    }
+
+    // Active Dropping Ball
+    if (activePlinkoBall) {
+      // Trail
+      for (let t = 0; t < activePlinkoBall.trail.length; t++) {
+        const tr = activePlinkoBall.trail[t];
+        const trailAlpha = (t + 1) / (activePlinkoBall.trail.length + 1) * 0.45;
+        ctx.beginPath();
+        ctx.arc(tr.x, tr.y, PLINKO.ballRadius * (0.35 + 0.65 * (t / activePlinkoBall.trail.length)), 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(250, 204, 21, ${trailAlpha})`;
+        ctx.fill();
+      }
+
+      // Ball Outer Glow
+      ctx.save();
+      ctx.shadowColor = '#facc15';
+      ctx.shadowBlur = 15;
+
+      // Ball Sphere Gradient
+      ctx.beginPath();
+      ctx.arc(activePlinkoBall.x, activePlinkoBall.y, PLINKO.ballRadius, 0, Math.PI * 2);
+      const ballGrad = ctx.createRadialGradient(
+        activePlinkoBall.x - 2, activePlinkoBall.y - 2, 1,
+        activePlinkoBall.x, activePlinkoBall.y, PLINKO.ballRadius
+      );
+      ballGrad.addColorStop(0, '#ffffff');
+      ballGrad.addColorStop(0.5, '#fef08a');
+      ballGrad.addColorStop(1, '#eab308');
+      ctx.fillStyle = ballGrad;
+      ctx.fill();
+      ctx.strokeStyle = '#ca8a04';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.restore();
+    }
+  }
+
+  function initPlinkoCanvas() {
+    if (!plinkoCtx) {
+      plinkoCtx = setupPlinkoCanvas();
+    }
+    drawPlinkoBoard(plinkoCtx);
+  }
+
+  function animatePlinkoDrop(dropData, onComplete) {
+    if (!plinkoCtx) {
+      plinkoCtx = setupPlinkoCanvas();
+    }
+
+    const path = dropData.path || []; // array of 11 values (0 or 1)
+    const slotIndex = dropData.slotIndex;
+    const multiplier = dropData.multiplier;
+
+    // Waypoint 0: Spawn point above apex
+    const waypoints = [
+      { x: 260, y: 22, isPeg: false }
+    ];
+
+    // Waypoint 1: Row 0 apex peg
+    const apex = getPegPos(0, 0);
+    waypoints.push({ x: apex.x, y: apex.y, isPeg: true });
+
+    // Waypoints for rows 1 to 10
+    let currentPegIndex = 0;
+    for (let r = 1; r < PLINKO.rows; r++) {
+      const step = path[r - 1]; // 0 = left, 1 = right
+      currentPegIndex += step;
+      const peg = getPegPos(r, currentPegIndex);
+      waypoints.push({ x: peg.x, y: peg.y, isPeg: true, dir: step });
+    }
+
+    // Final bucket target
+    const finalStep = path[10];
+    const bucketX = 51 + slotIndex * PLINKO.dx;
+    waypoints.push({ x: bucketX, y: 494, isPeg: false, dir: finalStep }); // Bucket mouth
+    waypoints.push({ x: bucketX, y: 518, isPeg: false, isBucketFloor: true, slotIndex }); // Bucket floor
+
+    // Segment list with start, end, control point, duration
+    const segments = [];
+    for (let s = 0; s < waypoints.length - 1; s++) {
+      const p0 = waypoints[s];
+      const p1 = waypoints[s + 1];
+
+      let duration = 115;
+      let cx = (p0.x + p1.x) / 2;
+      let cy = (p0.y + p1.y) / 2;
+
+      if (s === 0) {
+        // Initial drop from funnel to apex
+        duration = 135;
+        cx = 260;
+        cy = (p0.y + p1.y) / 2;
+      } else if (p1.isBucketFloor) {
+        // Settle into bucket
+        duration = 95;
+        cx = p1.x;
+        cy = (p0.y + p1.y) / 2;
+      } else {
+        // Peg deflection bounce
+        const dir = p1.dir !== undefined ? p1.dir : (p1.x >= p0.x ? 1 : 0);
+        const bulge = dir === 1 ? 14 : -14;
+        cx = p0.x + (p1.x - p0.x) * 0.25 + bulge;
+        cy = p0.y - 11;
+        duration = 110;
+      }
+
+      segments.push({ p0, p1, cx, cy, duration });
+    }
+
+    let currentSegmentIndex = 0;
+    let segmentStartTime = performance.now();
+
+    activePlinkoBall = {
+      x: waypoints[0].x,
+      y: waypoints[0].y,
+      trail: []
+    };
+
+    function triggerPegHit(pegPos) {
+      pegPulses.push({ x: pegPos.x, y: pegPos.y, r: 4, alpha: 0.85 });
+      for (let k = 0; k < 5; k++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 1.0 + Math.random() * 2.2;
+        plinkoParticles.push({
+          x: pegPos.x,
+          y: pegPos.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 0.6,
+          alpha: 0.9,
+          decay: 0.04,
+          size: 2,
+          color: 'rgb(56, 189, 248)'
+        });
+      }
+    }
+
+    function triggerBucketLanding(bucketIndex) {
+      activeBucketHit = { index: bucketIndex, timer: 75, maxTimer: 75 };
+      const sparkCount = multiplier >= 2.0 ? 30 : 14;
+      for (let k = 0; k < sparkCount; k++) {
+        const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.5;
+        const speed = 2.0 + Math.random() * 4.5;
+        const col = multiplier >= 6 ? 'rgb(239, 68, 68)' : (multiplier >= 1.2 ? 'rgb(234, 179, 8)' : 'rgb(59, 130, 246)');
+        plinkoParticles.push({
+          x: 51 + bucketIndex * PLINKO.dx,
+          y: 494,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          alpha: 1.0,
+          decay: 0.02,
+          size: multiplier >= 2.0 ? 3.2 : 2.4,
+          color: col
+        });
+      }
+    }
+
+    function stepAnimation(now) {
+      const seg = segments[currentSegmentIndex];
+      const elapsed = now - segmentStartTime;
+      const t = Math.min(1, elapsed / seg.duration);
+
+      // Quadratic Bézier interpolation
+      const invT = 1 - t;
+      const curX = invT * invT * seg.p0.x + 2 * invT * t * seg.cx + t * t * seg.p1.x;
+      const curY = invT * invT * seg.p0.y + 2 * invT * t * seg.cy + t * t * seg.p1.y;
+
+      activePlinkoBall.x = curX;
+      activePlinkoBall.y = curY;
+
+      // Update trail
+      activePlinkoBall.trail.push({ x: curX, y: curY });
+      if (activePlinkoBall.trail.length > 7) {
+        activePlinkoBall.trail.shift();
+      }
+
+      if (t >= 1) {
+        // Waypoint reached!
+        if (seg.p1.isPeg) {
+          triggerPegHit(seg.p1);
+        } else if (seg.p1.isBucketFloor) {
+          triggerBucketLanding(seg.p1.slotIndex);
+        }
+
+        currentSegmentIndex++;
+        if (currentSegmentIndex < segments.length) {
+          segmentStartTime = now;
+        } else {
+          // Animation complete!
+          drawPlinkoBoard(plinkoCtx);
+          setTimeout(() => {
+            if (onComplete) onComplete();
+          }, 350);
+
+          function drainEffects() {
+            drawPlinkoBoard(plinkoCtx);
+            if (pegPulses.length > 0 || plinkoParticles.length > 0 || activeBucketHit) {
+              requestAnimationFrame(drainEffects);
+            }
+          }
+          requestAnimationFrame(drainEffects);
+          return;
+        }
+      }
+
+      drawPlinkoBoard(plinkoCtx);
+      requestAnimationFrame(stepAnimation);
+    }
+
+    requestAnimationFrame(stepAnimation);
+  }
+
+  // Plinko Drop Ball Event Listener
+  if (btnDropBall) {
+    btnDropBall.addEventListener('click', async () => {
+      if (isPlinkoDropping) return;
+      const bet = parseInt(plinkoBetInput.value, 10);
+
+      if (isNaN(bet) || bet <= 0) {
+        showToast('error', 'Please enter a valid bet amount.');
+        return;
+      }
+
+      if (currentUser && currentUser.balance_pts < bet) {
+        showToast('error', `Insufficient PTS balance (You have ${currentUser.balance_pts} PTS).`);
+        return;
+      }
+
+      isPlinkoDropping = true;
+      btnDropBall.disabled = true;
+      btnDropBallText.textContent = 'DROPPING...';
+      plinkoStatusBanner.className = 'slot-status-banner';
+      plinkoStatusBanner.textContent = 'Ball in play... Bouncing down the board!';
+
+      try {
+        const res = await fetch('/api/casino/plinko', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bet })
+        });
+        const json = await res.json();
+
+        if (!res.ok || !json.success) {
+          showToast('error', json.error || 'Plinko drop failed.');
+          plinkoStatusBanner.className = 'slot-status-banner loss';
+          plinkoStatusBanner.textContent = json.error || 'Drop failed.';
+          isPlinkoDropping = false;
+          btnDropBall.disabled = false;
+          btnDropBallText.textContent = 'DROP BALL';
+          return;
+        }
+
+        animatePlinkoDrop(json, () => {
+          currentUser.balance_pts = json.newBalance;
+          updateUserData(currentUser);
+
+          if (json.multiplier >= 1.0) {
+            plinkoStatusBanner.className = 'slot-status-banner win';
+            showToast('success', json.message);
+          } else {
+            plinkoStatusBanner.className = 'slot-status-banner loss';
+            showToast('error', json.message);
+          }
+          plinkoStatusBanner.textContent = json.message;
+
+          isPlinkoDropping = false;
+          btnDropBall.disabled = false;
+          btnDropBallText.textContent = 'DROP BALL';
+        });
+
+      } catch (err) {
+        showToast('error', 'Network error during Plinko drop.');
+        isPlinkoDropping = false;
+        btnDropBall.disabled = false;
+        btnDropBallText.textContent = 'DROP BALL';
       }
     });
   }
