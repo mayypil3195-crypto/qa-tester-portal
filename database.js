@@ -396,6 +396,47 @@ function getLeaderboard(limit = 20, excludeDiscordIds = []) {
 }
 
 /**
+ * Fetch all Lead QA members (disqualified from rankings), sorted by balance_pts DESC
+ * @param {Array<string>} [includeDiscordIds=[]]
+ * @returns {Array<Object>}
+ */
+function getLeadTesters(includeDiscordIds = []) {
+  const cleanInclude = (Array.isArray(includeDiscordIds) ? includeDiscordIds : [])
+    .map(id => String(id).trim())
+    .filter(Boolean);
+
+  let query = `
+    SELECT discord_id, username, avatar, balance_pts
+    FROM users
+    WHERE (is_lead_tester = 1)
+  `;
+  const params = [];
+
+  if (cleanInclude.length > 0) {
+    const placeholders = cleanInclude.map(() => '?').join(',');
+    query = `
+      SELECT discord_id, username, avatar, balance_pts
+      FROM users
+      WHERE (is_lead_tester = 1 OR discord_id IN (${placeholders}))
+    `;
+    params.push(...cleanInclude);
+  }
+
+  query += `
+    ORDER BY balance_pts DESC, created_at ASC
+  `;
+
+  const rows = db.prepare(query).all(...params);
+  return rows.map(row => ({
+    discord_id: row.discord_id,
+    username: row.username,
+    avatar: row.avatar,
+    balance_pts: row.balance_pts,
+    isDsq: true
+  }));
+}
+
+/**
  * Records a shop purchase in the audit log
  * @param {Object} param0 
  * @param {string} param0.discord_id
@@ -578,6 +619,7 @@ module.exports = {
   setUserLeadStatus,
   updateBalance,
   getLeaderboard,
+  getLeadTesters,
   recordPurchase,
   addInventoryItem,
   getUserInventory,

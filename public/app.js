@@ -478,45 +478,100 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/leaderboard?limit=20');
       const data = await res.json();
 
-      if (!res.ok || !data.success || !Array.isArray(data.leaderboard) || data.leaderboard.length === 0) {
+      const regularTesters = Array.isArray(data.testers) 
+        ? data.testers 
+        : (Array.isArray(data.leaderboard) ? data.leaderboard.filter(t => !t.isDsq) : []);
+
+      const dsqTesters = Array.isArray(data.disqualified) 
+        ? data.disqualified 
+        : (Array.isArray(data.leaderboard) ? data.leaderboard.filter(t => t.isDsq) : []);
+
+      if (!res.ok || !data.success || (regularTesters.length === 0 && dsqTesters.length === 0)) {
         leaderboardTbody.innerHTML = '<tr><td colspan="3" class="table-empty">No tester rankings recorded yet.</td></tr>';
         return;
       }
 
       let rowsHtml = '';
-      data.leaderboard.forEach(tester => {
-        const isYou = currentUser && (tester.discord_id === currentUser.discord_id);
-        let rankDisplay = '';
-        if (tester.rank === 1) {
-          rankDisplay = '<span class="rank-pill rank-1" title="1st Place">🥇</span>';
-        } else if (tester.rank === 2) {
-          rankDisplay = '<span class="rank-pill rank-2" title="2nd Place">🥈</span>';
-        } else if (tester.rank === 3) {
-          rankDisplay = '<span class="rank-pill rank-3" title="3rd Place">🥉</span>';
-        } else {
-          rankDisplay = `<span class="rank-num">#${tester.rank}</span>`;
-        }
 
-        const avatar = tester.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
-        const cleanUsername = String(tester.username || 'Tester').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const balanceStr = Number(tester.balance_pts || 0).toLocaleString();
+      // 1. Render regular ranked testers
+      if (regularTesters.length > 0) {
+        regularTesters.forEach((tester, index) => {
+          const rank = tester.rank || (index + 1);
+          const isYou = currentUser && (tester.discord_id === currentUser.discord_id);
+          let rankDisplay = '';
+          if (rank === 1) {
+            rankDisplay = '<span class="rank-pill rank-1" title="1st Place">🥇</span>';
+          } else if (rank === 2) {
+            rankDisplay = '<span class="rank-pill rank-2" title="2nd Place">🥈</span>';
+          } else if (rank === 3) {
+            rankDisplay = '<span class="rank-pill rank-3" title="3rd Place">🥉</span>';
+          } else {
+            rankDisplay = `<span class="rank-num">#${rank}</span>`;
+          }
 
-        rowsHtml += `
-          <tr class="${isYou ? 'is-current-user' : ''}">
-            <td class="td-rank">${rankDisplay}</td>
-            <td>
-              <div class="tester-cell">
-                <img src="${avatar}" alt="" class="tester-avatar" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
-                <div class="tester-name-wrap">
-                  <span class="tester-name">${cleanUsername}</span>
-                  ${isYou ? '<span class="you-tag">You</span>' : ''}
+          const avatar = tester.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
+          const cleanUsername = String(tester.username || 'Tester').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          const balanceStr = Number(tester.balance_pts || 0).toLocaleString();
+
+          rowsHtml += `
+            <tr class="${isYou ? 'is-current-user' : ''}">
+              <td class="td-rank">${rankDisplay}</td>
+              <td>
+                <div class="tester-cell">
+                  <img src="${avatar}" alt="" class="tester-avatar" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                  <div class="tester-name-wrap">
+                    <span class="tester-name">${cleanUsername}</span>
+                    ${isYou ? '<span class="you-tag">You</span>' : ''}
+                  </div>
                 </div>
+              </td>
+              <td class="td-balance">${balanceStr} PTS</td>
+            </tr>
+          `;
+        });
+      }
+
+      // 2. Render Disqualified / Lead Testers at the bottom
+      if (dsqTesters.length > 0) {
+        rowsHtml += `
+          <tr class="leaderboard-separator-row">
+            <td colspan="3">
+              <div class="leaderboard-separator-content">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+                </svg>
+                Staff &amp; Testing Leads (Disqualified)
               </div>
             </td>
-            <td class="td-balance">${balanceStr} PTS</td>
           </tr>
         `;
-      });
+
+        dsqTesters.forEach(lead => {
+          const isYou = currentUser && (lead.discord_id === currentUser.discord_id);
+          const avatar = lead.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
+          const cleanUsername = String(lead.username || 'Lead Tester').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          const balanceStr = Number(lead.balance_pts || 0).toLocaleString();
+
+          rowsHtml += `
+            <tr class="leaderboard-row-dsq ${isYou ? 'is-current-user' : ''}">
+              <td class="td-rank">
+                <span class="badge-dsq" title="Lead QA Tester (Disqualified from public rankings)">DSQ</span>
+              </td>
+              <td>
+                <div class="tester-cell">
+                  <img src="${avatar}" alt="" class="tester-avatar" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                  <div class="tester-name-wrap">
+                    <span class="tester-name">${cleanUsername}</span>
+                    ${isYou ? '<span class="you-tag">You</span>' : ''}
+                  </div>
+                </div>
+              </td>
+              <td class="td-balance">${balanceStr} PTS</td>
+            </tr>
+          `;
+        });
+      }
 
       leaderboardTbody.innerHTML = rowsHtml;
     } catch (err) {

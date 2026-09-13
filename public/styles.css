@@ -944,6 +944,51 @@ body {
   font-size: 0.92rem;
 }
 
+/* Disqualified Lead QA Leaderboard Styles */
+.badge-dsq {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+  display: inline-block;
+}
+
+.leaderboard-row-dsq {
+  opacity: 0.75;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.leaderboard-row-dsq:hover {
+  opacity: 0.95;
+  background: rgba(239, 68, 68, 0.04);
+}
+
+.leaderboard-separator-row td {
+  background: #0e121b;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.leaderboard-separator-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.leaderboard-separator-content svg {
+  color: #f87171;
+}
+
 /* ---------------- VIEW 4: CASINO (SLOTS & PLINKO) ---------------- */
 .casino-mode-bar {
   display: flex;

@@ -1195,7 +1195,8 @@ app.post('/api/shop/buy', requireAuth, async (req, res) => {
 
 /**
  * Leaderboard Ranking Endpoint
- * Dynamically excludes users possessing the Lead QA role (LEAD_ROLE_ID: 1533076808902119495)
+ * Dynamically ranks regular testers and displays Lead QA Testers (role ID 1533076808902119495)
+ * at the bottom as disqualified (DSQ) while preserving their actual PTS balance.
  */
 app.get('/api/leaderboard', async (req, res) => {
   try {
@@ -1208,28 +1209,38 @@ app.get('/api/leaderboard', async (req, res) => {
     if (envLeadIds) {
       envLeadIds.split(/[,\s]+/).forEach(id => {
         const trimmed = id.trim();
-        if (trimmed) excludedIds.add(trimmed);
+        if (trimmed) {
+          excludedIds.add(trimmed);
+          try {
+            const matchedUser = db.db.prepare(`SELECT discord_id FROM users WHERE username = ? COLLATE NOCASE`).get(trimmed);
+            if (matchedUser) {
+              excludedIds.add(matchedUser.discord_id);
+            }
+          } catch (e) {}
+        }
       });
     }
 
-    // 2. If authenticated caller is a lead tester, exclude them and persist in DB
+    // 2. If authenticated caller is a lead tester, mark as lead and persist in DB
     if (req.session && req.session.user && req.session.user.isLeadTester) {
       excludedIds.add(req.session.user.id);
       db.setUserLeadStatus(req.session.user.id, true);
     }
 
-    // 3. Inspect top candidates to dynamically verify and filter any leads via Discord API
+    // 3. Mark existing DB leads in excluded set
+    try {
+      const dbLeadUsers = db.db.prepare(`SELECT discord_id FROM users WHERE is_lead_tester = 1`).all();
+      for (const u of dbLeadUsers) {
+        excludedIds.add(u.discord_id);
+      }
+    } catch (e) {}
+
+    // 4. Inspect users to dynamically verify any lead roles via Discord API
     const botToken = process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN;
     const guildId = process.env.DISCORD_GUILD_ID || process.env.GUILD_ID;
     if (botToken && guildId) {
-      const topCandidates = db.db.prepare(`
-        SELECT discord_id, is_lead_tester
-        FROM users
-        ORDER BY balance_pts DESC, created_at ASC
-        LIMIT ?
-      `).all(limit + 20);
-
-      for (const candidate of topCandidates) {
+      const allUsers = db.getAllUsers();
+      for (const candidate of allUsers) {
         if (candidate.is_lead_tester === 1 || excludedIds.has(candidate.discord_id)) {
           excludedIds.add(candidate.discord_id);
           continue;
@@ -1241,10 +1252,20 @@ app.get('/api/leaderboard', async (req, res) => {
       }
     }
 
-    const leaderboard = db.getLeaderboard(limit, Array.from(excludedIds));
+    const leadIdsArray = Array.from(excludedIds);
+    const testers = db.getLeaderboard(limit, leadIdsArray);
+    const disqualified = db.getLeadTesters(leadIdsArray);
+
+    const unifiedLeaderboard = [
+      ...testers.map(t => ({ ...t, isDsq: false })),
+      ...disqualified.map(t => ({ ...t, rank: null, isDsq: true }))
+    ];
+
     res.json({
       success: true,
-      leaderboard
+      testers,
+      disqualified,
+      leaderboard: unifiedLeaderboard
     });
   } catch (error) {
     console.error('[Leaderboard API Error]:', error);
