@@ -651,6 +651,64 @@ app.get('/api/me', async (req, res) => {
 });
 
 /**
+ * Evaluates the outcome of a 3-reel slot spin.
+ * - 3 matching symbols award jackpot multipliers (77x, 30x, 15x, 8x, 5x, 3x).
+ * - Any pair of 2 matching symbols awards a 1.5x payout.
+ * - 3 distinct symbols result in 0x (No match / loss).
+ */
+function evaluateSlotSpin(reels, betAmount = 0) {
+  const counts = {};
+  for (const s of reels) counts[s] = (counts[s] || 0) + 1;
+
+  let multiplier = 0;
+  let comboName = '';
+
+  if (counts['7️⃣'] === 3) {
+    multiplier = 77;
+    comboName = '7️⃣7️⃣7️⃣ Jackpot (77x)';
+  } else if (counts['💎'] === 3) {
+    multiplier = 30;
+    comboName = '💎💎💎 3 Diamonds (30x)';
+  } else if (counts['🔔'] === 3) {
+    multiplier = 15;
+    comboName = '🔔🔔🔔 3 Bells (15x)';
+  } else if (counts['🍇'] === 3) {
+    multiplier = 8;
+    comboName = '🍇🍇🍇 3 Grapes (8x)';
+  } else if (counts['🍋'] === 3) {
+    multiplier = 5;
+    comboName = '🍋🍋🍋 3 Lemons (5x)';
+  } else if (counts['🍒'] === 3) {
+    multiplier = 3;
+    comboName = '🍒🍒🍒 3 Cherries (3x)';
+  } else {
+    // Check if any 2 reels match
+    const hasPair = (reels[0] === reels[1]) || (reels[1] === reels[2]) || (reels[0] === reels[2]);
+    if (hasPair) {
+      let matchedSymbol = null;
+      if (reels[0] === reels[1] || reels[0] === reels[2]) {
+        matchedSymbol = reels[0];
+      } else if (reels[1] === reels[2]) {
+        matchedSymbol = reels[1];
+      }
+      multiplier = 1.5;
+      comboName = `Pair of ${matchedSymbol} (1.5x)`;
+    }
+  }
+
+  const winAmount = Math.round(betAmount * multiplier);
+  const netChange = winAmount - betAmount;
+
+  return {
+    multiplier,
+    comboName,
+    winAmount,
+    netChange,
+    won: multiplier > 0
+  };
+}
+
+/**
  * 3-Reel Slot Machine Mini-Game
  */
 app.post('/api/casino/spin', requireAuth, (req, res) => {
@@ -700,43 +758,13 @@ app.post('/api/casino/spin', requireAuth, (req, res) => {
     }
 
     const reels = [rollSymbol(), rollSymbol(), rollSymbol()];
+    const spinOutcome = evaluateSlotSpin(reels, betAmount);
+    const { multiplier, comboName, winAmount, netChange } = spinOutcome;
 
-    // Count occurrences
-    const counts = {};
-    for (const s of reels) counts[s] = (counts[s] || 0) + 1;
-
-    let multiplier = 0;
-    let comboName = '';
-
-    if (counts['7️⃣'] === 3) {
-      multiplier = 77;
-      comboName = '7️⃣7️⃣7️⃣ Jackpot (77x)';
-    } else if (counts['💎'] === 3) {
-      multiplier = 30;
-      comboName = '💎💎💎 3 Diamonds (30x)';
-    } else if (counts['🔔'] === 3) {
-      multiplier = 15;
-      comboName = '🔔🔔🔔 3 Bells (15x)';
-    } else if (counts['🍇'] === 3) {
-      multiplier = 8;
-      comboName = '🍇🍇🍇 3 Grapes (8x)';
-    } else if (counts['🍋'] === 3) {
-      multiplier = 5;
-      comboName = '🍋🍋🍋 3 Lemons (5x)';
-    } else if (counts['🍒'] === 3) {
-      multiplier = 3;
-      comboName = '🍒🍒🍒 3 Cherries (3x)';
-    } else if (counts['🍒'] === 2) {
-      multiplier = 1.5;
-      comboName = '🍒🍒 Two Cherries (1.5x)';
-    }
-
-    const winAmount = Math.round(betAmount * multiplier);
     if (winAmount > 0) {
       db.updateBalance(user.discord_id, winAmount);
     }
 
-    const netChange = winAmount - betAmount;
     const updatedUser = db.getUser(user.discord_id);
 
     // Asynchronously log notable casino activity to logs webhook
@@ -1818,5 +1846,6 @@ module.exports = {
   LEAD_ROLE_ID,
   memberRoleCache,
   MAX_CASINO_WAGER,
-  MIN_CASINO_WAGER
+  MIN_CASINO_WAGER,
+  evaluateSlotSpin
 };
