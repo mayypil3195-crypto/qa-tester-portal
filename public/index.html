@@ -3,94 +3,301 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QA Submission</title>
+  <title>QA Tester Portal</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <main class="page-wrap">
-    <div class="card">
-      <header class="card-header">
-        <h1 class="card-title">QA Submission</h1>
-        <p class="card-subtitle">Submit your testing report for points verification</p>
-      </header>
+  <!-- Global App Wrapper -->
+  <div id="app" class="app-root">
 
-      <div id="alertBanner" class="alert-banner" role="alert" style="display: none;"></div>
-
-      <form id="submissionForm" class="submission-form" novalidate>
-        <div class="form-group">
-          <label for="username" class="form-label">Discord Username</label>
-          <input 
-            type="text" 
-            id="username" 
-            name="username" 
-            class="form-input" 
-            placeholder="username" 
-            required 
-            autocomplete="off"
-          >
+    <!-- Top Navigation Bar (Hidden when unauthenticated) -->
+    <header id="navbar" class="top-nav" style="display: none;">
+      <div class="nav-container">
+        <div class="nav-left">
+          <div class="brand">
+            <span class="brand-badge">QA</span>
+            <span class="brand-text">Portal</span>
+          </div>
+          <nav class="nav-links">
+            <button type="button" class="nav-btn active" data-tab="home">Home</button>
+            <button type="button" class="nav-btn" data-tab="submit">Submit Report</button>
+            <button type="button" class="nav-btn" data-tab="shop">Shop</button>
+            <button type="button" class="nav-btn" data-tab="casino">Casino</button>
+            <button type="button" class="nav-btn" data-tab="lootbox">Loot Boxes</button>
+          </nav>
         </div>
 
-        <div class="form-group">
-          <label for="discord_id" class="form-label">Discord User ID</label>
-          <input 
-            type="text" 
-            id="discord_id" 
-            name="discord_id" 
-            class="form-input" 
-            placeholder="18-digit ID" 
-            pattern="[0-9]{17,20}" 
-            required 
-            autocomplete="off"
-          >
+        <div class="nav-right">
+          <div class="user-pill">
+            <img id="navUserAvatar" src="" alt="Avatar" class="user-avatar">
+            <div class="user-meta">
+              <span id="navUsername" class="user-name">Tester</span>
+              <span class="user-balance"><strong id="navBalance">0</strong> PTS</span>
+            </div>
+          </div>
+          <a href="/auth/logout" class="btn-logout" title="Log out of session">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Global Toast Alert -->
+    <div id="globalToast" class="toast-banner" style="display: none;"></div>
+
+    <!-- Main Content Container -->
+    <main class="main-body">
+
+      <!-- View 0: Unauthenticated Gatekeeper Screen -->
+      <section id="viewLogin" class="view-panel" style="display: none;">
+        <div class="card login-card">
+          <div class="gate-icon-wrap">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.894.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+            </svg>
+          </div>
+          <h1 class="login-title">QA Tester Portal</h1>
+          <p class="login-desc">
+            Restricted access. Authenticate via Discord to verify authorized guild membership and access your tester profile, point requests, and PTS balance.
+          </p>
+          <a href="/auth/discord" class="btn-discord-login">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.894.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+            </svg>
+            Login with Discord
+          </a>
+          <span class="gate-footnote">Server membership verified via Bot Token OAuth2</span>
+        </div>
+      </section>
+
+      <!-- View 1: Home Dashboard -->
+      <section id="viewHome" class="view-panel" style="display: none;">
+        <div class="dashboard-header card">
+          <div class="dash-welcome">
+            <h2 class="dash-title">Welcome, <span id="homeUsername">Tester</span></h2>
+            <p class="dash-sub">QA Testing Economy Portal &bull; Verified Guild Member</p>
+          </div>
+          <div class="dash-balance-card">
+            <span class="balance-label">Current Balance</span>
+            <div class="balance-display"><span id="homeBalance">50</span> <span class="pts-tag">PTS</span></div>
+          </div>
         </div>
 
-        <div class="form-group">
-          <label for="points" class="form-label">Points Requested</label>
-          <input 
-            type="number" 
-            id="points" 
-            name="points" 
-            class="form-input" 
-            min="1" 
-            max="1000" 
-            value="10" 
-            required
-          >
+        <div class="quick-grid">
+          <div class="quick-card" data-jump="submit">
+            <div class="quick-icon">📋</div>
+            <h3>Submit Report</h3>
+            <p>Send verified bug reports or test feedback to lead reviewers.</p>
+          </div>
+          <div class="quick-card" data-jump="shop">
+            <div class="quick-icon">🛍️</div>
+            <h3>Reward Shop</h3>
+            <p>Redeem your accumulated PTS for Discord perks and cosmetic roles.</p>
+          </div>
+          <div class="quick-card" data-jump="casino">
+            <div class="quick-icon">🎲</div>
+            <h3>PTS Coinflip</h3>
+            <p>Wager your test points in a fast, double-or-nothing coinflip.</p>
+          </div>
+          <div class="quick-card" data-jump="lootbox">
+            <div class="quick-icon">🎁</div>
+            <h3>Loot Boxes</h3>
+            <p>Open testing supply crates to win high-yield PTS payouts.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- View 2: Submit QA Report Form -->
+      <section id="viewSubmit" class="view-panel" style="display: none;">
+        <div class="card form-card">
+          <header class="card-header">
+            <h1 class="card-title">QA Submission</h1>
+            <p class="card-subtitle">Submit your testing report for points verification</p>
+          </header>
+
+          <div id="submitAlertBanner" class="alert-banner" role="alert" style="display: none;"></div>
+
+          <form id="submissionForm" class="submission-form" novalidate>
+            <div class="form-row-2">
+              <div class="form-group">
+                <label for="submitUsername" class="form-label">Discord Username <span class="lock-tag">Locked</span></label>
+                <input type="text" id="submitUsername" class="form-input locked-input" readonly>
+              </div>
+
+              <div class="form-group">
+                <label for="submitDiscordId" class="form-label">Discord User ID <span class="lock-tag">Verified</span></label>
+                <input type="text" id="submitDiscordId" class="form-input locked-input" readonly>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="points" class="form-label">Points Requested</label>
+              <input type="number" id="points" name="points" class="form-input" min="1" max="1000" value="10" required>
+            </div>
+
+            <div class="form-group">
+              <label for="description" class="form-label">Report Details</label>
+              <textarea id="description" name="description" class="form-textarea" placeholder="Describe the bugs found or testing done..." rows="4" required></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="proof_url" class="form-label">Proof Link <span class="optional-label">(optional)</span></label>
+              <input type="url" id="proof_url" name="proof_url" class="form-input" placeholder="https://..." autocomplete="off">
+            </div>
+
+            <button type="submit" id="submitBtn" class="btn-primary">
+              <span id="btnText">Submit</span>
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <!-- View 3: Reward Shop -->
+      <section id="viewShop" class="view-panel" style="display: none;">
+        <div class="section-title-wrap">
+          <h2 class="section-title">Perk & Reward Shop</h2>
+          <p class="section-sub">Redeem earned points for server recognitions and perks.</p>
         </div>
 
-        <div class="form-group">
-          <label for="description" class="form-label">Report Details</label>
-          <textarea 
-            id="description" 
-            name="description" 
-            class="form-textarea" 
-            placeholder="Describe the bugs found or testing done..." 
-            rows="4" 
-            required
-          ></textarea>
+        <div class="shop-grid">
+          <div class="shop-card card">
+            <div class="shop-icon">🏷️</div>
+            <h3 class="shop-item-name">Custom Tester Role</h3>
+            <p class="shop-item-desc">Personalized custom role title and color on the Discord server.</p>
+            <div class="shop-bottom">
+              <span class="price-pill">150 PTS</span>
+              <button type="button" class="btn-buy" data-item-id="custom-role" data-price="150">Purchase</button>
+            </div>
+          </div>
+
+          <div class="shop-card card">
+            <div class="shop-icon">🔔</div>
+            <h3 class="shop-item-name">Color Ping Mention</h3>
+            <p class="shop-item-desc">Custom accent highlight styling for testing pings and announcements.</p>
+            <div class="shop-bottom">
+              <span class="price-pill">75 PTS</span>
+              <button type="button" class="btn-buy" data-item-id="color-ping" data-price="75">Purchase</button>
+            </div>
+          </div>
+
+          <div class="shop-card card">
+            <div class="shop-icon">⚡</div>
+            <h3 class="shop-item-name">Double PTS Booster</h3>
+            <p class="shop-item-desc">Multiplies all PTS rewards from your next approved QA report by 2x.</p>
+            <div class="shop-bottom">
+              <span class="price-pill">200 PTS</span>
+              <button type="button" class="btn-buy" data-item-id="pts-booster" data-price="200">Purchase</button>
+            </div>
+          </div>
+
+          <div class="shop-card card">
+            <div class="shop-icon">⭐</div>
+            <h3 class="shop-item-name">Discord VIP Badge</h3>
+            <p class="shop-item-desc">Permanent VIP contributor badge displayed in economy logs and portal.</p>
+            <div class="shop-bottom">
+              <span class="price-pill">100 PTS</span>
+              <button type="button" class="btn-buy" data-item-id="vip-badge" data-price="100">Purchase</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- View 4: Casino Coinflip -->
+      <section id="viewCasino" class="view-panel" style="display: none;">
+        <div class="casino-container card">
+          <header class="card-header text-center">
+            <h2 class="card-title">PTS Coinflip</h2>
+            <p class="card-subtitle">Choose Heads or Tails and double your points (50/50 win rate)</p>
+          </header>
+
+          <div class="coin-stage">
+            <div id="coinGraphic" class="coin-visual">
+              <span id="coinFace" class="coin-face">🦅</span>
+            </div>
+            <div id="coinOutcomeText" class="coin-result-text">Pick your side to flip</div>
+          </div>
+
+          <div class="side-selector">
+            <button type="button" class="side-btn active" data-side="heads">Heads (🦅)</button>
+            <button type="button" class="side-btn" data-side="tails">Tails (🪙)</button>
+          </div>
+
+          <div class="bet-controls">
+            <label for="coinBetInput" class="form-label">Wager Amount (PTS)</label>
+            <div class="input-with-presets">
+              <input type="number" id="coinBetInput" class="form-input" min="1" max="10000" value="10">
+              <div class="quick-bets">
+                <button type="button" class="bet-preset" data-bet="10">+10</button>
+                <button type="button" class="bet-preset" data-bet="25">+25</button>
+                <button type="button" class="bet-preset" data-bet="50">+50</button>
+                <button type="button" class="bet-preset" id="btnMaxBet">Max</button>
+              </div>
+            </div>
+          </div>
+
+          <button type="button" id="btnFlipCoin" class="btn-primary">Flip Coin</button>
+        </div>
+      </section>
+
+      <!-- View 5: Loot Boxes -->
+      <section id="viewLootbox" class="view-panel" style="display: none;">
+        <div class="section-title-wrap">
+          <h2 class="section-title">Loot Box Crates</h2>
+          <p class="section-sub">Unlock testing reward crates for instant points and rare achievements.</p>
         </div>
 
-        <div class="form-group">
-          <label for="proof_url" class="form-label">Proof Link <span class="optional-label">(optional)</span></label>
-          <input 
-            type="url" 
-            id="proof_url" 
-            name="proof_url" 
-            class="form-input" 
-            placeholder="https://..." 
-            autocomplete="off"
-          >
+        <div class="loot-grid">
+          <!-- Standard Crate -->
+          <div class="crate-card card standard-crate">
+            <div class="crate-glow"></div>
+            <div class="crate-icon-box">📦</div>
+            <h3 class="crate-name">Standard Crate</h3>
+            <span class="crate-cost-tag">Cost: 20 PTS</span>
+            <ul class="crate-drop-list">
+              <li>Common: 10–22 PTS (50%)</li>
+              <li>Uncommon: 25–40 PTS (30%)</li>
+              <li>Rare: 45–70 PTS (15%)</li>
+              <li>Legendary: 90–140 PTS (5%)</li>
+            </ul>
+            <button type="button" class="btn-open-crate" data-crate="standard">Open for 20 PTS</button>
+          </div>
+
+          <!-- Rare Crate -->
+          <div class="crate-card card rare-crate">
+            <div class="crate-glow rare-glow"></div>
+            <div class="crate-icon-box rare-icon">💎</div>
+            <h3 class="crate-name">Rare Crate</h3>
+            <span class="crate-cost-tag rare-cost">Cost: 60 PTS</span>
+            <ul class="crate-drop-list">
+              <li>Uncommon: 35–65 PTS (35%)</li>
+              <li>Rare: 70–110 PTS (35%)</li>
+              <li>Epic: 120–180 PTS (20%)</li>
+              <li>Mythic: 220–340 PTS (10%)</li>
+            </ul>
+            <button type="button" class="btn-open-crate btn-rare-open" data-crate="rare">Open for 60 PTS</button>
+          </div>
         </div>
 
-        <button type="submit" id="submitBtn" class="btn-submit">
-          <span id="btnText">Submit</span>
-        </button>
-      </form>
-    </div>
-  </main>
+        <!-- Loot Result Card -->
+        <div id="lootResultCard" class="card loot-result-card" style="display: none;">
+          <div class="loot-result-header">
+            <span id="lootRarityTag" class="rarity-badge">Rare</span>
+            <h3 id="lootItemTitle" class="loot-item-title">Item Unlocked</h3>
+          </div>
+          <div id="lootPayoutText" class="loot-payout">+50 PTS</div>
+          <p id="lootMessageText" class="loot-message">Congratulations!</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
 
   <script src="app.js"></script>
 </body>

@@ -1,21 +1,48 @@
 require('dotenv').config();
 const path = require('path');
 const express = require('express');
+const session = require('express-session');
 const db = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL ? process.env.DISCORD_WEBHOOK_URL.trim() : '';
 
+// Trust reverse proxy (Railway, Heroku, etc.)
+app.set('trust proxy', 1);
+
 // Middleware configuration
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Session configuration
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'qa-portal-secret-salt-2026-auth',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: 'auto',
+    maxAge: 1000 * 60 * 60 * 24 * 7 // 7 days
+  }
+}));
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 /**
+ * Authentication Middleware
+ */
+function requireAuth(req, res, next) {
+  if (!req.session || !req.session.user) {
+    return res.status(401).json({
+      success: false,
+      error: 'Authentication required. Please log in with Discord.'
+    });
+  }
+  next();
+}
+
+/**
  * Validate URL string
- * @param {string} urlString
- * @returns {boolean}
  */
 function isValidHttpUrl(urlString) {
   try {
@@ -28,8 +55,6 @@ function isValidHttpUrl(urlString) {
 
 /**
  * Dispatches an embed notification to Discord Webhook asynchronously
- * @param {Object} data
- * @param {number|bigint} id
  */
 async function dispatchDiscordWebhook(data, id) {
   if (!DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL.includes('your_webhook_id')) {
@@ -39,7 +64,6 @@ async function dispatchDiscordWebhook(data, id) {
 
   const { username, discord_id, points, description, proof_url } = data;
 
-  // Discord embed character limit safety (field max 1024)
   const formattedDescription = description.length > 1020 
     ? description.substring(0, 1017) + '...' 
     : description;
@@ -101,58 +125,478 @@ async function dispatchDiscordWebhook(data, id) {
   }
 }
 
-// ---------------- API ENDPOINTS ----------------
+/**
+ * Strictly styled 403 Access Denied template for unauthorized testers (no invite links)
+ */
+function renderAccessDeniedHtml(username) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>403 Access Denied: Unauthorized Tester</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0c0f17;
+      --surface: #141824;
+      --border: #232a3d;
+      --danger: #f85149;
+      --danger-glow: rgba(248, 81, 73, 0.25);
+      --text: #f0f6fc;
+      --text-muted: #8b949e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+    }
+    .card {
+      background-color: var(--surface);
+      border: 1px solid var(--border);
+      border-top: 4px solid var(--danger);
+      border-radius: 12px;
+      max-width: 480px;
+      width: 100%;
+      padding: 36px 28px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+      text-align: center;
+    }
+    .icon-wrap {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: var(--danger-glow);
+      border: 1px solid rgba(248, 81, 73, 0.4);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      color: var(--danger);
+    }
+    h1 {
+      font-size: 1.45rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 12px;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(248, 81, 73, 0.12);
+      border: 1px solid rgba(248, 81, 73, 0.35);
+      color: var(--danger);
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      margin-bottom: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    p {
+      color: var(--text-muted);
+      font-size: 0.92rem;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+    .btn-return {
+      display: inline-block;
+      background: #21283b;
+      color: #ffffff;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.88rem;
+      padding: 10px 20px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      transition: background 0.18s ease;
+    }
+    .btn-return:hover {
+      background: #2a344d;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon-wrap">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+      </svg>
+    </div>
+    <br>
+    <span class="badge">Gatekeeper Enforcement</span>
+    <h1>403 Access Denied</h1>
+    <p>
+      Tester identity <strong>${username ? String(username).replace(/</g, '&lt;') : 'Authenticated User'}</strong> is not a verified member of the authorized QA testing guild.
+      <br><br>
+      Access to this portal is strictly restricted to active testing guild members.
+    </p>
+    <a href="/auth/logout" class="btn-return">Return to Login</a>
+  </div>
+</body>
+</html>`;
+}
+
+// ---------------- AUTHENTICATION & OAUTH2 ----------------
 
 /**
- * Health check endpoint
+ * Initiate Discord OAuth2 login
  */
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString()
+app.get('/auth/discord', (req, res) => {
+  const clientId = process.env.DISCORD_CLIENT_ID || process.env.CLIENT_ID;
+  if (!clientId) {
+    return res.status(500).send('DISCORD_CLIENT_ID is not configured in server environment.');
+  }
+
+  const redirectUri = process.env.DISCORD_REDIRECT_URI || `${req.protocol}://${req.get('host')}/auth/discord/callback`;
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: 'identify guilds'
   });
+
+  res.redirect(`https://discord.com/oauth2/authorize?${params.toString()}`);
 });
 
 /**
- * Query recent submissions
+ * Discord OAuth2 Callback & Gatekeeper Verification
  */
-app.get('/api/requests', (req, res) => {
+app.get('/auth/discord/callback', async (req, res) => {
+  const { code, error } = req.query;
+  if (error || !code) {
+    return res.redirect(`/?auth_error=${encodeURIComponent(error || 'Authorization code missing')}`);
+  }
+
+  const clientId = process.env.DISCORD_CLIENT_ID || process.env.CLIENT_ID;
+  const clientSecret = process.env.DISCORD_CLIENT_SECRET || process.env.CLIENT_SECRET;
+  const botToken = process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN;
+  const guildId = process.env.DISCORD_GUILD_ID || process.env.GUILD_ID;
+  const redirectUri = process.env.DISCORD_REDIRECT_URI || `${req.protocol}://${req.get('host')}/auth/discord/callback`;
+
   try {
-    const limit = parseInt(req.query.limit, 10) || 50;
-    const requests = db.getAllRequests(limit);
-    res.json({
-      success: true,
-      data: requests
+    // 1. Exchange code for OAuth2 access token
+    const tokenParams = new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'authorization_code',
+      code: String(code),
+      redirect_uri: redirectUri
     });
-  } catch (error) {
-    console.error('[API Error /api/requests]:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to retrieve requests.'
+
+    const tokenResponse = await fetch('https://discord.com/api/v10/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: tokenParams.toString()
     });
+
+    if (!tokenResponse.ok) {
+      const tokenErr = await tokenResponse.text();
+      console.error('[OAuth2 Token Exchange Failed]:', tokenErr);
+      return res.status(400).send('Failed to exchange authorization code with Discord.');
+    }
+
+    const tokenData = await tokenResponse.json();
+
+    // 2. Fetch User Identity
+    const userResponse = await fetch('https://discord.com/api/v10/users/@me', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` }
+    });
+
+    if (!userResponse.ok) {
+      return res.status(400).send('Failed to fetch Discord user profile.');
+    }
+
+    const userData = await userResponse.json();
+
+    // 3. Strict Gatekeeper: Verify Guild Membership via Bot Token
+    if (botToken && guildId) {
+      const memberResponse = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${userData.id}`, {
+        headers: { Authorization: `Bot ${botToken}` }
+      });
+
+      if (!memberResponse.ok) {
+        console.warn(`[Gatekeeper] Access Denied for User ID ${userData.id} (${userData.username}). Not a member of guild ${guildId}.`);
+        return res.status(403).send(renderAccessDeniedHtml(userData.global_name || userData.username));
+      }
+    }
+
+    // 4. Authenticated & Verified: Upsert User & Establish Session
+    const avatarUrl = userData.avatar
+      ? `https://cdn.discordapp.com/avatars/${userData.id}/${userData.avatar}.png`
+      : `https://cdn.discordapp.com/embed/avatars/${parseInt(userData.discriminator || '0', 10) % 5}.png`;
+
+    const displayName = userData.global_name || userData.username;
+
+    const dbUser = db.upsertUser({
+      discord_id: userData.id,
+      username: displayName,
+      avatar: avatarUrl
+    });
+
+    req.session.user = {
+      id: userData.id,
+      username: dbUser.username,
+      avatar: dbUser.avatar
+    };
+
+    res.redirect('/');
+  } catch (err) {
+    console.error('[OAuth2 Callback Error]:', err);
+    res.status(500).send('Internal server error during authentication.');
   }
 });
 
 /**
- * Submit point request
+ * Logout
  */
-app.post('/api/request-points', async (req, res) => {
+app.get('/auth/logout', (req, res) => {
+  if (req.session) {
+    req.session.destroy(() => {
+      res.redirect('/');
+    });
+  } else {
+    res.redirect('/');
+  }
+});
+
+// Development/testing login simulation (active if ALLOW_DEV_LOGIN is set or during local test execution)
+if (process.env.ALLOW_DEV_LOGIN === 'true' || process.env.NODE_ENV === 'test') {
+  app.get('/auth/dev-login', (req, res) => {
+    const discord_id = req.query.discord_id || '1546968192264568883';
+    const username = req.query.username || 'Test_QA_User';
+    const avatar = req.query.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
+
+    const dbUser = db.upsertUser({ discord_id, username, avatar });
+    req.session.user = {
+      id: dbUser.discord_id,
+      username: dbUser.username,
+      avatar: dbUser.avatar
+    };
+    res.redirect('/');
+  });
+}
+
+// ---------------- USER & ECONOMY APIS ----------------
+
+/**
+ * Get current user & balance
+ */
+app.get('/api/me', (req, res) => {
+  if (!req.session || !req.session.user) {
+    return res.json({
+      authenticated: false,
+      user: null
+    });
+  }
+
+  const dbUser = db.getUser(req.session.user.id);
+  if (!dbUser) {
+    req.session.destroy();
+    return res.json({
+      authenticated: false,
+      user: null
+    });
+  }
+
+  res.json({
+    authenticated: true,
+    user: {
+      discord_id: dbUser.discord_id,
+      username: dbUser.username,
+      avatar: dbUser.avatar,
+      balance_pts: dbUser.balance_pts,
+      created_at: dbUser.created_at
+    }
+  });
+});
+
+/**
+ * Casino Coinflip Mini-Game
+ */
+app.post('/api/casino/coinflip', requireAuth, (req, res) => {
   try {
-    const { username, discord_id, points, work_type, description, proof_url } = req.body;
+    const { bet, side } = req.body;
+    const chosenSide = String(side || '').toLowerCase().trim();
+
+    if (chosenSide !== 'heads' && chosenSide !== 'tails') {
+      return res.status(400).json({ success: false, error: 'Side must be either "heads" or "tails".' });
+    }
+
+    const betAmount = parseInt(bet, 10);
+    if (isNaN(betAmount) || betAmount <= 0) {
+      return res.status(400).json({ success: false, error: 'Bet must be a positive integer.' });
+    }
+
+    const user = db.getUser(req.session.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+
+    if (user.balance_pts < betAmount) {
+      return res.status(400).json({ success: false, error: `Insufficient PTS balance (You have ${user.balance_pts} PTS).` });
+    }
+
+    // 50% Win Rate
+    const outcome = Math.random() < 0.5 ? 'heads' : 'tails';
+    const won = (chosenSide === outcome);
+    const delta = won ? betAmount : -betAmount;
+
+    const updatedUser = db.updateBalance(user.discord_id, delta);
+
+    return res.json({
+      success: true,
+      won,
+      outcome,
+      chosenSide,
+      bet: betAmount,
+      delta,
+      newBalance: updatedUser.balance_pts,
+      message: won ? `🎉 Victory! The coin landed on ${outcome}. You won +${betAmount} PTS!` : `💸 Bummer! The coin landed on ${outcome}. You lost -${betAmount} PTS.`
+    });
+  } catch (error) {
+    console.error('[Casino Coinflip Error]:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Internal casino error.' });
+  }
+});
+
+/**
+ * Loot Box Opening Simulation
+ */
+app.post('/api/lootbox/open', requireAuth, (req, res) => {
+  try {
+    const { crateType } = req.body;
+    const type = String(crateType || '').toLowerCase().trim();
+
+    const user = db.getUser(req.session.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+
+    let cost = 0;
+    let pool = [];
+
+    if (type === 'standard') {
+      cost = 20;
+      pool = [
+        { weight: 50, name: 'Small Bug Bounty Cache', minPts: 10, maxPts: 22, rarity: 'Common' },
+        { weight: 30, name: 'Field Tester Supply Kit', minPts: 25, maxPts: 40, rarity: 'Uncommon' },
+        { weight: 15, name: 'Silver Screwdriver Trophy', minPts: 45, maxPts: 70, rarity: 'Rare' },
+        { weight: 5,  name: 'Lead Reviewer Master Key', minPts: 90, maxPts: 140, rarity: 'Legendary' }
+      ];
+    } else if (type === 'rare') {
+      cost = 60;
+      pool = [
+        { weight: 35, name: 'Enhanced Protocol Stash', minPts: 35, maxPts: 65, rarity: 'Uncommon' },
+        { weight: 35, name: 'Cybernetic Defect Scanner', minPts: 70, maxPts: 110, rarity: 'Rare' },
+        { weight: 20, name: 'Elite Tester Commendation', minPts: 120, maxPts: 180, rarity: 'Epic' },
+        { weight: 10, name: 'Apex QA Crown & Relic', minPts: 220, maxPts: 340, rarity: 'Mythic' }
+      ];
+    } else {
+      return res.status(400).json({ success: false, error: 'Invalid crate type. Must be "standard" or "rare".' });
+    }
+
+    if (user.balance_pts < cost) {
+      return res.status(400).json({ success: false, error: `Insufficient PTS balance for this crate (Cost: ${cost} PTS, you have ${user.balance_pts} PTS).` });
+    }
+
+    // Roll reward item by weight
+    const totalWeight = pool.reduce((acc, i) => acc + i.weight, 0);
+    let rand = Math.random() * totalWeight;
+    let selectedItem = pool[0];
+
+    for (const item of pool) {
+      if (rand < item.weight) {
+        selectedItem = item;
+        break;
+      }
+      rand -= item.weight;
+    }
+
+    // Calculate random points won
+    const rewardPts = Math.floor(Math.random() * (selectedItem.maxPts - selectedItem.minPts + 1)) + selectedItem.minPts;
+    const netDelta = rewardPts - cost;
+
+    const updatedUser = db.updateBalance(user.discord_id, netDelta);
+
+    return res.json({
+      success: true,
+      crateType: type,
+      cost,
+      rewardPts,
+      netDelta,
+      itemWon: selectedItem.name,
+      rarity: selectedItem.rarity,
+      newBalance: updatedUser.balance_pts,
+      message: `Opened ${type.toUpperCase()} crate! Unlocked [${selectedItem.rarity}] ${selectedItem.name} for +${rewardPts} PTS (Net: ${netDelta >= 0 ? '+' : ''}${netDelta} PTS).`
+    });
+  } catch (error) {
+    console.error('[Lootbox Error]:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Internal lootbox error.' });
+  }
+});
+
+/**
+ * Shop Catalog Purchase
+ */
+app.post('/api/shop/buy', requireAuth, (req, res) => {
+  try {
+    const { itemId } = req.body;
+    const user = db.getUser(req.session.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+
+    const catalog = {
+      'custom-role': { id: 'custom-role', name: 'Custom Tester Role', price: 150, desc: 'Exclusive custom-named cosmetic role on the Discord server' },
+      'color-ping': { id: 'color-ping', name: 'Color Ping Mention', price: 75, desc: 'Accent highlight color for announcements and task pings' },
+      'pts-booster': { id: 'pts-booster', name: 'Double PTS Booster', price: 200, desc: 'Applies 2x multiplier on your next approved report' },
+      'vip-badge': { id: 'vip-badge', name: 'Discord VIP Badge', price: 100, desc: 'Profile showcase badge displayed in tester logs' }
+    };
+
+    const item = catalog[itemId];
+    if (!item) {
+      return res.status(400).json({ success: false, error: 'Unknown shop item.' });
+    }
+
+    if (user.balance_pts < item.price) {
+      return res.status(400).json({ success: false, error: `Insufficient PTS balance (Price: ${item.price} PTS, balance: ${user.balance_pts} PTS).` });
+    }
+
+    const updatedUser = db.updateBalance(user.discord_id, -item.price);
+
+    return res.json({
+      success: true,
+      item,
+      newBalance: updatedUser.balance_pts,
+      message: `Purchased "${item.name}" for ${item.price} PTS! Lead administrators have logged your perk.`
+    });
+  } catch (error) {
+    console.error('[Shop Buy Error]:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Internal shop error.' });
+  }
+});
+
+// ---------------- QA SUBMISSION APIS ----------------
+
+/**
+ * Submit point request (Protected via OAuth2 session)
+ */
+app.post('/api/request-points', requireAuth, async (req, res) => {
+  try {
+    const { points, description, proof_url } = req.body;
+    const sessionUser = req.session.user;
 
     const errors = [];
-
-    // Username validation
-    if (!username || typeof username !== 'string' || !username.trim()) {
-      errors.push('Discord username is required.');
-    }
-
-    // Discord ID validation (Snowflake format: 17 to 20 digits)
-    const sanitizedDiscordId = discord_id ? String(discord_id).trim() : '';
-    if (!sanitizedDiscordId || !/^\d{17,20}$/.test(sanitizedDiscordId)) {
-      errors.push('Discord User ID must be a 17-20 digit number.');
-    }
 
     // Points validation (1 to 1000)
     const parsedPoints = Number(points);
@@ -186,16 +630,12 @@ app.post('/api/request-points', async (req, res) => {
       });
     }
 
-    // Default fallback for work_type to maintain SQLite schema compatibility
-    const sanitizedWorkType = (work_type && typeof work_type === 'string' && work_type.trim().length > 0)
-      ? work_type.trim()
-      : 'General Testing';
-
+    // Always use session user identity to prevent spoofing
     const payload = {
-      username: username.trim(),
-      discord_id: sanitizedDiscordId,
+      username: sessionUser.username,
+      discord_id: sessionUser.id,
       points: parsedPoints,
-      work_type: sanitizedWorkType,
+      work_type: 'General Testing',
       description: description.trim(),
       proof_url: sanitizedProofUrl
     };
@@ -220,6 +660,17 @@ app.post('/api/request-points', async (req, res) => {
       error: 'Internal server error while processing request.'
     });
   }
+});
+
+/**
+ * Health check endpoint
+ */
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Start listening

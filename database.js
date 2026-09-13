@@ -14,6 +14,14 @@ db.pragma('foreign_keys = ON');
 // Initialize schema
 const initSchema = () => {
   db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      discord_id TEXT PRIMARY KEY,
+      username TEXT NOT NULL,
+      avatar TEXT,
+      balance_pts INTEGER DEFAULT 50,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS point_requests (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT NOT NULL,
@@ -33,7 +41,27 @@ const initSchema = () => {
 
 initSchema();
 
-// Prepared statements for high performance and SQL injection prevention
+// Prepared statements
+const getUserStmt = db.prepare(`
+  SELECT discord_id, username, avatar, balance_pts, created_at
+  FROM users
+  WHERE discord_id = ?
+`);
+
+const upsertUserStmt = db.prepare(`
+  INSERT INTO users (discord_id, username, avatar, balance_pts)
+  VALUES (@discord_id, @username, @avatar, 50)
+  ON CONFLICT(discord_id) DO UPDATE SET
+    username = excluded.username,
+    avatar = excluded.avatar
+`);
+
+const updateBalanceStmt = db.prepare(`
+  UPDATE users
+  SET balance_pts = balance_pts + ?
+  WHERE discord_id = ? AND (balance_pts + ? >= 0)
+`);
+
 const insertStmt = db.prepare(`
   INSERT INTO point_requests (username, discord_id, points, work_type, description, proof_url)
   VALUES (@username, @discord_id, @points, @work_type, @description, @proof_url)
@@ -59,15 +87,64 @@ const updateStatusStmt = db.prepare(`
 `);
 
 /**
- * Creates a new point request record in the database.
- * @param {Object} param0
- * @param {string} param0.username
+ * Fetch a user by Discord ID
+ * @param {string} discordId 
+ * @returns {Object|undefined}
+ */
+function getUser(discordId) {
+  if (!discordId) return undefined;
+  return getUserStmt.get(String(discordId).trim());
+}
+
+/**
+ * Upserts a user on login. If new, initializes balance to 50 PTS.
+ * If existing, updates username & avatar while retaining balance.
+ * @param {Object} param0 
  * @param {string} param0.discord_id
- * @param {number} param0.points
- * @param {string} param0.work_type
- * @param {string} param0.description
- * @param {string|null} param0.proof_url
- * @returns {number|bigint} lastInsertRowid
+ * @param {string} param0.username
+ * @param {string|null} param0.avatar
+ * @returns {Object}
+ */
+function upsertUser({ discord_id, username, avatar }) {
+  const id = String(discord_id).trim();
+  upsertUserStmt.run({
+    discord_id: id,
+    username: String(username).trim(),
+    avatar: avatar ? String(avatar).trim() : null
+  });
+  return getUser(id);
+}
+
+/**
+ * Atomically updates a user's PTS balance (positive or negative).
+ * Prevents balance from dropping below 0.
+ * @param {string} discordId 
+ * @param {number} deltaPoints 
+ * @returns {Object} Updated user object
+ */
+function updateBalance(discordId, deltaPoints) {
+  const id = String(discordId).trim();
+  const delta = parseInt(deltaPoints, 10);
+  if (isNaN(delta)) {
+    throw new Error('Invalid delta points value');
+  }
+
+  const result = updateBalanceStmt.run(delta, id, delta);
+  if (result.changes === 0) {
+    const existing = getUser(id);
+    if (!existing) {
+      throw new Error('User not found');
+    }
+    if (existing.balance_pts + delta < 0) {
+      throw new Error('Insufficient PTS balance');
+    }
+  }
+
+  return getUser(id);
+}
+
+/**
+ * Creates a new point request record in the database.
  */
 function createRequest({ username, discord_id, points, work_type, description, proof_url }) {
   const result = insertStmt.run({
@@ -83,8 +160,6 @@ function createRequest({ username, discord_id, points, work_type, description, p
 
 /**
  * Fetches recent point requests.
- * @param {number} [limit=50]
- * @returns {Array<Object>}
  */
 function getAllRequests(limit = 50) {
   const sanitizedLimit = Math.max(1, Math.min(parseInt(limit, 10) || 50, 500));
@@ -93,8 +168,6 @@ function getAllRequests(limit = 50) {
 
 /**
  * Fetches a single request record by its ID.
- * @param {number|string} id
- * @returns {Object|undefined}
  */
 function getRequestById(id) {
   return getByIdStmt.get(parseInt(id, 10));
@@ -102,9 +175,6 @@ function getRequestById(id) {
 
 /**
  * Safely updates request status with validation.
- * @param {number|string} id
- * @param {'PENDING'|'APPROVED'|'REJECTED'} status
- * @returns {boolean} true if row was updated
  */
 function updateRequestStatus(id, status) {
   const validStatuses = ['PENDING', 'APPROVED', 'REJECTED'];
@@ -127,6 +197,9 @@ function close() {
 
 module.exports = {
   db,
+  getUser,
+  upsertUser,
+  updateBalance,
   createRequest,
   getAllRequests,
   getRequestById,
