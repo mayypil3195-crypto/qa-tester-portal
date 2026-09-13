@@ -361,41 +361,206 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Attach purchase listeners to dynamic buttons
     shopGrid.querySelectorAll('.btn-buy').forEach(btn => {
-      btn.addEventListener('click', async () => {
+      btn.addEventListener('click', () => {
         const itemId = btn.getAttribute('data-item-id');
-        const price = parseInt(btn.getAttribute('data-price'), 10);
+        const item = shopCatalog.find(i => i.id === itemId);
+        if (!item) return;
 
-        if (currentUser && currentUser.balance_pts < price) {
-          showToast('error', `Insufficient PTS balance (You need ${price} PTS, you have ${currentUser.balance_pts} PTS).`);
-          return;
-        }
-
-        btn.disabled = true;
-        btn.textContent = 'Buying...';
-
-        try {
-          const res = await fetch('/api/shop/buy', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ itemId })
-          });
-          const json = await res.json();
-
-          if (res.ok && json.success) {
-            currentUser.balance_pts = json.newBalance;
-            updateUserData(currentUser);
-            showToast('success', json.message);
-          } else {
-            showToast('error', json.error || 'Failed to purchase item.');
-          }
-        } catch (err) {
-          showToast('error', 'Network error during shop purchase.');
-        } finally {
-          btn.disabled = false;
-          btn.textContent = 'Purchase';
+        const isStackable = Boolean(item.stackable || item.category === 'Consumables');
+        if (isStackable) {
+          openBuyModal(item);
+        } else {
+          executePurchase(item, 1, btn);
         }
       });
     });
+  }
+
+  // ---------------- SHOP MODAL & QUANTITY SLIDER ----------------
+  const buyModal = document.getElementById('buyModal');
+  const buyModalItemImg = document.getElementById('buyModalItemImg');
+  const buyModalArtSlot = document.getElementById('buyModalArtSlot');
+  const buyModalItemIcon = document.getElementById('buyModalItemIcon');
+  const buyModalItemName = document.getElementById('buyModalItemName');
+  const buyModalUnitPrice = document.getElementById('buyModalUnitPrice');
+  const buyQuantityRange = document.getElementById('buyQuantityRange');
+  const buyQuantityInput = document.getElementById('buyQuantityInput');
+  const buyQuantityDisplay = document.getElementById('buyQuantityDisplay');
+  const buyTotalCost = document.getElementById('buyTotalCost');
+  const buyMaxLimitLabel = document.getElementById('buyMaxLimitLabel');
+  const buyModalUserBalance = document.getElementById('buyModalUserBalance');
+  const btnCancelBuyModal = document.getElementById('btnCancelBuyModal');
+  const btnCancelBuyModalX = document.getElementById('btnCancelBuyModalX');
+  const btnConfirmBuyModal = document.getElementById('btnConfirmBuyModal');
+
+  let currentModalItem = null;
+  let currentModalQty = 1;
+
+  function closeBuyModal() {
+    if (buyModal) {
+      buyModal.style.display = 'none';
+    }
+    currentModalItem = null;
+    currentModalQty = 1;
+    if (btnConfirmBuyModal) {
+      btnConfirmBuyModal.disabled = false;
+      btnConfirmBuyModal.textContent = 'Confirm Purchase';
+    }
+  }
+
+  function updateModalTotalCost(qty) {
+    if (!currentModalItem) return;
+    const userBalance = (currentUser && currentUser.balance_pts) || 0;
+    const maxAffordable = Math.floor(userBalance / currentModalItem.price);
+    const maxLimit = Math.max(1, Math.min(50, maxAffordable > 0 ? maxAffordable : 1));
+
+    let sanitizedQty = parseInt(qty, 10);
+    if (isNaN(sanitizedQty) || sanitizedQty < 1) sanitizedQty = 1;
+    if (sanitizedQty > maxLimit) sanitizedQty = maxLimit;
+
+    currentModalQty = sanitizedQty;
+    const total = currentModalItem.price * currentModalQty;
+
+    if (buyQuantityDisplay) buyQuantityDisplay.textContent = currentModalQty;
+    if (buyQuantityInput) buyQuantityInput.value = currentModalQty;
+    if (buyQuantityRange) buyQuantityRange.value = currentModalQty;
+    if (buyTotalCost) buyTotalCost.textContent = total.toLocaleString();
+
+    if (btnConfirmBuyModal) {
+      btnConfirmBuyModal.disabled = (userBalance < total);
+    }
+  }
+
+  function openBuyModal(item) {
+    if (!buyModal || !item) return;
+    currentModalItem = item;
+
+    const userBalance = (currentUser && currentUser.balance_pts) || 0;
+    const maxAffordable = Math.floor(userBalance / item.price);
+    const maxLimit = Math.max(1, Math.min(50, maxAffordable > 0 ? maxAffordable : 1));
+
+    if (buyModalItemName) buyModalItemName.textContent = item.name;
+    if (buyModalUnitPrice) buyModalUnitPrice.textContent = item.price.toLocaleString();
+    if (buyModalUserBalance) buyModalUserBalance.textContent = userBalance.toLocaleString();
+    if (buyMaxLimitLabel) buyMaxLimitLabel.textContent = maxLimit;
+
+    if (item.image) {
+      if (buyModalItemImg) {
+        buyModalItemImg.src = item.image;
+        buyModalItemImg.alt = item.name;
+        buyModalItemImg.style.display = 'block';
+      }
+      if (buyModalArtSlot) buyModalArtSlot.style.display = 'none';
+    } else {
+      if (buyModalItemImg) buyModalItemImg.style.display = 'none';
+      if (buyModalArtSlot) {
+        buyModalArtSlot.style.display = 'flex';
+        if (buyModalItemIcon) buyModalItemIcon.textContent = item.icon || '📦';
+      }
+    }
+
+    const canAffordOne = (userBalance >= item.price);
+    if (buyQuantityRange) {
+      buyQuantityRange.min = '1';
+      buyQuantityRange.max = String(maxLimit);
+      buyQuantityRange.value = '1';
+      buyQuantityRange.disabled = !canAffordOne;
+    }
+    if (buyQuantityInput) {
+      buyQuantityInput.min = '1';
+      buyQuantityInput.max = String(maxLimit);
+      buyQuantityInput.value = '1';
+      buyQuantityInput.disabled = !canAffordOne;
+    }
+
+    updateModalTotalCost(1);
+    buyModal.style.display = 'flex';
+  }
+
+  if (buyQuantityRange) {
+    buyQuantityRange.addEventListener('input', () => {
+      updateModalTotalCost(buyQuantityRange.value);
+    });
+  }
+
+  if (buyQuantityInput) {
+    buyQuantityInput.addEventListener('input', () => {
+      updateModalTotalCost(buyQuantityInput.value);
+    });
+    buyQuantityInput.addEventListener('change', () => {
+      updateModalTotalCost(buyQuantityInput.value);
+    });
+  }
+
+  if (btnCancelBuyModal) {
+    btnCancelBuyModal.addEventListener('click', closeBuyModal);
+  }
+  if (btnCancelBuyModalX) {
+    btnCancelBuyModalX.addEventListener('click', closeBuyModal);
+  }
+  if (buyModal) {
+    buyModal.addEventListener('click', (e) => {
+      if (e.target === buyModal) closeBuyModal();
+    });
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && buyModal && buyModal.style.display !== 'none') {
+      closeBuyModal();
+    }
+  });
+
+  if (btnConfirmBuyModal) {
+    btnConfirmBuyModal.addEventListener('click', async () => {
+      if (!currentModalItem) return;
+      const item = currentModalItem;
+      const quantity = currentModalQty;
+
+      btnConfirmBuyModal.disabled = true;
+      btnConfirmBuyModal.textContent = 'Purchasing...';
+
+      await executePurchase(item, quantity);
+      closeBuyModal();
+    });
+  }
+
+  async function executePurchase(item, quantity = 1, triggerBtn = null) {
+    const totalCost = item.price * quantity;
+    if (currentUser && currentUser.balance_pts < totalCost) {
+      showToast('error', `Insufficient PTS balance (You need ${totalCost} PTS, you have ${currentUser.balance_pts} PTS).`);
+      return;
+    }
+
+    if (triggerBtn) {
+      triggerBtn.disabled = true;
+      triggerBtn.textContent = 'Buying...';
+    }
+
+    try {
+      const res = await fetch('/api/shop/buy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemId: item.id, quantity })
+      });
+      const json = await res.json();
+
+      if (res.ok && json.success) {
+        currentUser.balance_pts = json.newBalance;
+        updateUserData(currentUser);
+        showToast('success', json.message);
+        if (activeTab === 'inventory') {
+          loadUserInventory();
+        }
+      } else {
+        showToast('error', json.error || 'Failed to purchase item.');
+      }
+    } catch (err) {
+      showToast('error', 'Network error during shop purchase.');
+    } finally {
+      if (triggerBtn) {
+        triggerBtn.disabled = false;
+        triggerBtn.textContent = 'Purchase';
+      }
+    }
   }
 
   async function loadShopCatalog() {

@@ -631,6 +631,61 @@
       </section>
 
     </main>
+
+    <!-- Purchase Modal for Stackable Items -->
+    <div id="buyModal" class="modal-overlay" style="display: none;">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 class="modal-title">Purchase Item</h3>
+          <button type="button" class="modal-close-btn" id="btnCancelBuyModalX" aria-label="Close modal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="buy-modal-item-preview">
+            <div class="buy-modal-img-wrap">
+              <img id="buyModalItemImg" src="" alt="" class="buy-modal-item-img" />
+              <div id="buyModalArtSlot" class="shop-art-slot" style="display: none;">
+                <span id="buyModalItemIcon" class="shop-art-icon">📦</span>
+              </div>
+            </div>
+            <div class="buy-modal-item-info">
+              <h4 id="buyModalItemName" class="buy-modal-item-title">Item Name</h4>
+              <div class="buy-modal-unit-price">
+                Unit Price: <span id="buyModalUnitPrice">0</span> PTS
+              </div>
+            </div>
+          </div>
+
+          <div class="buy-modal-slider-section">
+            <div class="slider-header-row">
+              <label for="buyQuantityRange" class="slider-label">Quantity</label>
+              <div class="slider-val-wrap">
+                <input type="number" id="buyQuantityInput" class="buy-qty-input" min="1" max="50" value="1" aria-label="Purchase quantity">
+                <span id="buyQuantityDisplay" class="buy-qty-badge">1</span>
+              </div>
+            </div>
+            <input type="range" id="buyQuantityRange" class="quantity-slider" min="1" max="50" value="1" aria-label="Quantity slider">
+            <div class="slider-limits-row">
+              <span>1</span>
+              <span id="buyMaxLimitLabel">50</span>
+            </div>
+          </div>
+
+          <div class="buy-modal-summary">
+            <div class="summary-label">Total:</div>
+            <div class="summary-cost">
+              <span id="buyTotalCost">0</span> <span class="pts-currency">PTS</span>
+            </div>
+          </div>
+          <div id="buyModalBalanceNote" class="buy-modal-balance-note">
+            Your Balance: <span id="buyModalUserBalance">0</span> PTS
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" id="btnCancelBuyModal" class="btn-modal-cancel">Cancel</button>
+          <button type="button" id="btnConfirmBuyModal" class="btn-modal-confirm">Confirm Purchase</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="app.js"></script>

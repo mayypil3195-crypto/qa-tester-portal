@@ -1021,7 +1021,8 @@ const SHOP_CATALOG = {
     badge: 'Consumable',
     desc: 'Reroll unit traits in-game to optimize combat synergies.',
     icon: '🎲',
-    image: '/assets/reroll.webp'
+    image: '/assets/reroll.webp',
+    stackable: true
   },
   'modifier-prism': {
     id: 'modifier-prism',
@@ -1031,7 +1032,8 @@ const SHOP_CATALOG = {
     badge: 'Enhancement',
     desc: 'Alter special unit modifiers and awaken hidden abilities.',
     icon: '🔮',
-    image: '/assets/modifirer.png'
+    image: '/assets/modifirer.png',
+    stackable: true
   },
   'stat-crystal': {
     id: 'stat-crystal',
@@ -1041,7 +1043,8 @@ const SHOP_CATALOG = {
     badge: 'Upgrade',
     desc: 'Permanently boost base unit attack and defense stats.',
     icon: '💎',
-    image: '/assets/stat.webp'
+    image: '/assets/stat.webp',
+    stackable: true
   },
   'magical-leaf': {
     id: 'magical-leaf',
@@ -1051,7 +1054,8 @@ const SHOP_CATALOG = {
     badge: 'Material',
     desc: 'Rare evolution catalyst required for high-tier unit ascensions.',
     icon: '🍃',
-    image: '/assets/magicleaf.webp'
+    image: '/assets/magicleaf.webp',
+    stackable: true
   },
 
   // Units & Rarities
@@ -1187,45 +1191,63 @@ app.post('/api/shop/buy', requireAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Unknown shop item.' });
     }
 
-    if (user.balance_pts < item.price) {
+    const isStackable = Boolean(item.stackable || item.category === 'Consumables');
+    let quantity = Math.max(1, parseInt(req.body.quantity, 10) || 1);
+
+    if (isStackable) {
+      // Cap max batch purchase between 1 and 50 per transaction
+      quantity = Math.min(50, quantity);
+    } else {
+      // For unique non-stackable items (like Units/Roles), enforce quantity = 1
+      quantity = 1;
+    }
+
+    const totalCost = item.price * quantity;
+
+    if (user.balance_pts < totalCost) {
       return res.status(400).json({
         success: false,
-        error: `Insufficient PTS balance (Price: ${item.price} PTS, you have ${user.balance_pts} PTS).`
+        error: `Insufficient PTS balance (Total Cost: ${totalCost} PTS for ${quantity > 1 ? `${quantity}x ` : ''}${item.name}, you have ${user.balance_pts} PTS).`
       });
     }
 
-    // Atomically deduct balance
-    const updatedUser = db.updateBalance(user.discord_id, -item.price);
+    // Atomically deduct total cost from balance
+    const updatedUser = db.updateBalance(user.discord_id, -totalCost);
+
+    const displayName = quantity > 1 ? `${item.name} (x${quantity})` : item.name;
 
     // Record purchase in database & insert into player inventory
     db.recordPurchase({
       discord_id: user.discord_id,
       item_id: item.id,
-      item_name: item.name,
-      cost: item.price
+      item_name: displayName,
+      cost: totalCost
     });
 
     db.addInventoryItem({
       discord_id: user.discord_id,
       item_id: item.id,
-      item_name: item.name,
+      item_name: displayName,
       category: item.category,
-      price_pts: item.price
+      price_pts: totalCost
     });
 
     // Fire Discord notification
     dispatchShopWebhook({
       discord_id: user.discord_id,
       username: user.username,
-      item,
+      item: { ...item, name: displayName, price: totalCost },
+      quantity,
       newBalance: updatedUser.balance_pts
     }).catch(err => console.error('[Shop Webhook Dispatch Error]:', err));
 
     return res.json({
       success: true,
       item,
+      quantity,
+      totalCost,
       newBalance: updatedUser.balance_pts,
-      message: `Purchased "${item.name}" for ${item.price} PTS! Your reward has been logged for delivery.`
+      message: `Purchased ${quantity > 1 ? `${quantity}x ` : ''}"${item.name}" for ${totalCost} PTS! Your reward has been logged for delivery.`
     });
   } catch (error) {
     console.error('[Shop Buy Error]:', error);
