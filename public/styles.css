@@ -1923,6 +1923,29 @@ body {
   font-weight: 800;
 }
 
+.case-key-status {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #f1f5f9;
+}
+
+.case-key-status .key-status-icon {
+  font-size: 1.1rem;
+}
+
+.case-key-status #asxKeyCount {
+  color: #ffd700;
+  font-weight: 800;
+  font-size: 1.05rem;
+}
+
 .btn-open-case {
   background: linear-gradient(135deg, #ffd700 0%, #d97706 100%);
   color: #000000;
@@ -1935,7 +1958,7 @@ body {
   padding: 12px 32px;
   cursor: pointer;
   box-shadow: 0 4px 18px rgba(245, 158, 11, 0.4);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease, background 0.15s ease;
 }
 
 .btn-open-case:hover:not(:disabled) {
@@ -1946,6 +1969,18 @@ body {
 
 .btn-open-case:active:not(:disabled) {
   transform: translateY(1px);
+}
+
+.btn-open-case.btn-buy-key {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 18px rgba(59, 130, 246, 0.4);
+}
+
+.btn-open-case.btn-buy-key:hover:not(:disabled) {
+  background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
+  box-shadow: 0 6px 24px rgba(59, 130, 246, 0.6);
+  filter: brightness(1.1);
 }
 
 .btn-open-case:disabled {
@@ -2355,6 +2390,18 @@ body {
   background: rgba(248, 81, 73, 0.15);
   border: 1px solid rgba(248, 81, 73, 0.4);
   color: #ff7b72;
+}
+
+.status-usable {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  color: #fbbf24;
+}
+
+.status-consumed {
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  color: #94a3b8;
 }
 
 .review-actions-wrap {

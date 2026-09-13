@@ -78,6 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const caseSpinnerTrack = document.getElementById('caseSpinnerTrack');
   const btnOpenCase = document.getElementById('btnOpenCase');
   const btnOpenCaseText = document.getElementById('btnOpenCaseText');
+  const asxKeyCount = document.getElementById('asxKeyCount');
   const caseResultCard = document.getElementById('caseResultCard');
   const caseResultImg = document.getElementById('caseResultImg');
   const caseResultIcon = document.getElementById('caseResultIcon');
@@ -163,6 +164,11 @@ document.addEventListener('DOMContentLoaded', () => {
     submitUsername.value = user.username;
     submitDiscordId.value = user.discord_id;
 
+    // Update Case Key count UI if present
+    if (user.asxKeyCount !== undefined && typeof updateCaseKeyUI === 'function') {
+      updateCaseKeyUI(user.asxKeyCount);
+    }
+
     // Cap slot and plinko bets if needed
     if (slotBetInput && parseInt(slotBetInput.value, 10) > user.balance_pts) {
       slotBetInput.value = Math.max(1, user.balance_pts);
@@ -200,8 +206,13 @@ document.addEventListener('DOMContentLoaded', () => {
       loadUserInventory();
     } else if (tabName === 'admin') {
       loadAdminData();
-    } else if (tabName === 'casino' && currentCasinoMode === 'plinko') {
-      initPlinkoCanvas();
+    } else if (tabName === 'lootbox' || tabName === 'casino') {
+      if (typeof refreshUserKeyCount === 'function') {
+        refreshUserKeyCount();
+      }
+      if (tabName === 'casino' && currentCasinoMode === 'plinko') {
+        initPlinkoCanvas();
+      }
     }
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -551,6 +562,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (res.ok && json.success) {
         currentUser.balance_pts = json.newBalance;
+        if (json.asxKeyCount !== undefined) {
+          currentUser.asxKeyCount = json.asxKeyCount;
+          if (typeof updateCaseKeyUI === 'function') updateCaseKeyUI(json.asxKeyCount);
+        } else if (item.id === 'asx_case_key' || item.id === 'asx-case-key') {
+          if (typeof refreshUserKeyCount === 'function') refreshUserKeyCount();
+        }
         updateUserData(currentUser);
         showToast('success', json.message);
         if (activeTab === 'inventory') {
@@ -612,8 +629,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
         inventoryTbody.innerHTML = data.inventory.map(item => {
           const isPending = (item.status === 'PENDING');
-          const statusClass = isPending ? 'status-pending-delivery' : 'status-delivered';
-          const statusText = isPending ? '⏳ Pending Delivery' : '✅ Delivered In-Game';
+          const isUsable = (item.status === 'USABLE' || item.status === 'OWNED');
+          const isConsumed = (item.status === 'CONSUMED');
+          let statusClass = 'status-delivered';
+          let statusText = '✅ Delivered In-Game';
+          if (isPending) {
+            statusClass = 'status-pending-delivery';
+            statusText = '⏳ Pending Delivery';
+          } else if (isUsable) {
+            statusClass = 'status-usable';
+            statusText = '🔑 Usable Key';
+          } else if (isConsumed) {
+            statusClass = 'status-consumed';
+            statusText = '⚡ Used';
+          }
 
           return `
             <tr>
@@ -1751,13 +1780,50 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   let isCaseSpinning = false;
+  let currentUserKeys = 0;
+
+  function updateCaseKeyUI(count) {
+    const parsed = Math.max(0, parseInt(count, 10) || 0);
+    currentUserKeys = parsed;
+    if (currentUser) {
+      currentUser.asxKeyCount = parsed;
+    }
+    if (asxKeyCount) {
+      asxKeyCount.textContent = parsed;
+    }
+    if (btnOpenCase && btnOpenCaseText && !isCaseSpinning) {
+      if (parsed > 0) {
+        btnOpenCase.disabled = false;
+        btnOpenCase.classList.remove('btn-buy-key');
+        btnOpenCaseText.textContent = 'UNLOCK CASE (1 KEY)';
+      } else {
+        btnOpenCase.disabled = false;
+        btnOpenCase.classList.add('btn-buy-key');
+        btnOpenCaseText.textContent = 'Buy Key in Shop (50 PTS)';
+      }
+    }
+  }
+
+  async function refreshUserKeyCount() {
+    try {
+      const res = await fetch('/api/casino/keys');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.count !== undefined) {
+          updateCaseKeyUI(data.count);
+        }
+      }
+    } catch (err) {
+      console.warn('[Key Refresh Error]:', err);
+    }
+  }
 
   async function openCaseRoulette() {
     if (isCaseSpinning) return;
-    const cost = 50;
 
-    if (currentUser && currentUser.balance_pts < cost) {
-      showToast('error', `Insufficient PTS balance (Cost: ${cost} PTS, you have ${currentUser.balance_pts} PTS).`);
+    if (currentUserKeys <= 0) {
+      showToast('info', 'Opening a case requires an ASX Case Key. Redirecting to Shop...');
+      switchTab('shop');
       return;
     }
 
@@ -1787,9 +1853,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!res.ok || !json.success) {
         showToast('error', json.error || 'Failed to open case.');
         isCaseSpinning = false;
-        if (btnOpenCase) btnOpenCase.disabled = false;
-        if (btnOpenCaseText) btnOpenCaseText.textContent = 'UNLOCK CASE (50 PTS)';
+        updateCaseKeyUI(currentUserKeys);
         return;
+      }
+
+      if (json.remainingKeys !== undefined) {
+        currentUserKeys = json.remainingKeys;
+        if (currentUser) currentUser.asxKeyCount = json.remainingKeys;
+        if (asxKeyCount) asxKeyCount.textContent = json.remainingKeys;
       }
 
       const tape = Array.isArray(json.tape) ? json.tape : [];
@@ -1871,7 +1942,7 @@ document.addEventListener('DOMContentLoaded', () => {
             caseResultPoints.textContent = `+${json.rewardPts} PTS`;
             caseResultPoints.style.color = '#ffd700';
           } else {
-            caseResultPoints.textContent = `+${json.rewardPts} PTS (Net: ${json.netChange >= 0 ? '+' : ''}${json.netChange})`;
+            caseResultPoints.textContent = `+${json.rewardPts} PTS`;
             caseResultPoints.style.color = '#10b981';
           }
 
@@ -1895,21 +1966,27 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast(winner.rarity === 'gold' ? 'success' : 'info', json.message);
 
         isCaseSpinning = false;
-        if (btnOpenCase) btnOpenCase.disabled = false;
-        if (btnOpenCaseText) btnOpenCaseText.textContent = 'UNLOCK CASE (50 PTS)';
+        updateCaseKeyUI(json.remainingKeys !== undefined ? json.remainingKeys : currentUserKeys);
       }, 5550);
 
     } catch (err) {
       console.error('[Case Opening Error]:', err);
       showToast('error', 'Network error while opening case.');
       isCaseSpinning = false;
-      if (btnOpenCase) btnOpenCase.disabled = false;
-      if (btnOpenCaseText) btnOpenCaseText.textContent = 'UNLOCK CASE (50 PTS)';
+      updateCaseKeyUI(currentUserKeys);
     }
   }
 
   if (btnOpenCase) {
-    btnOpenCase.addEventListener('click', openCaseRoulette);
+    btnOpenCase.addEventListener('click', () => {
+      if (isCaseSpinning) return;
+      if (currentUserKeys <= 0) {
+        showToast('info', 'Opening a case requires an ASX Case Key. Redirecting to Shop...');
+        switchTab('shop');
+        return;
+      }
+      openCaseRoulette();
+    });
   }
 
   // ---------------- LEAD QA PANEL ----------------

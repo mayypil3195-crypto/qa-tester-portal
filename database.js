@@ -201,7 +201,23 @@ const getAuditLogsStmt = db.prepare(`
 
 const insertInventoryStmt = db.prepare(`
   INSERT INTO inventory (discord_id, item_id, item_name, category, price_pts, status)
-  VALUES (@discord_id, @item_id, @item_name, @category, @price_pts, 'PENDING')
+  VALUES (@discord_id, @item_id, @item_name, @category, @price_pts, COALESCE(@status, 'PENDING'))
+`);
+
+const countKeysStmt = db.prepare(`
+  SELECT COUNT(*) as count FROM inventory
+  WHERE discord_id = ? AND item_id = ? AND status IN ('USABLE', 'OWNED')
+`);
+
+const consumeKeyStmt = db.prepare(`
+  UPDATE inventory
+  SET status = 'CONSUMED'
+  WHERE id = (
+    SELECT id FROM inventory
+    WHERE discord_id = ? AND item_id = ? AND status IN ('USABLE', 'OWNED')
+    ORDER BY id ASC
+    LIMIT 1
+  )
 `);
 
 const getUserInventoryStmt = db.prepare(`
@@ -547,17 +563,36 @@ function getAuditLogs(limit = 50) {
 }
 
 /**
- * Adds an item to the player inventory with status PENDING
+ * Adds an item to the player inventory with optional status (default PENDING)
  */
-function addInventoryItem({ discord_id, item_id, item_name, category, price_pts }) {
+function addInventoryItem({ discord_id, item_id, item_name, category, price_pts, status = 'PENDING' }) {
   const res = insertInventoryStmt.run({
     discord_id: String(discord_id).trim(),
     item_id: String(item_id).trim(),
     item_name: String(item_name).trim(),
     category: String(category || 'General').trim(),
-    price_pts: parseInt(price_pts, 10)
+    price_pts: parseInt(price_pts, 10),
+    status: status ? String(status).trim().toUpperCase() : 'PENDING'
   });
   return res.lastInsertRowid;
+}
+
+/**
+ * Get count of usable keys for a user
+ */
+function getUserKeyCount(discordId, keyId = 'asx_case_key') {
+  if (!discordId) return 0;
+  const row = countKeysStmt.get(String(discordId).trim(), String(keyId).trim());
+  return row ? row.count : 0;
+}
+
+/**
+ * Atomically consumes 1 usable key from user inventory
+ */
+function consumeUserKey(discordId, keyId = 'asx_case_key') {
+  if (!discordId) return false;
+  const res = consumeKeyStmt.run(String(discordId).trim(), String(keyId).trim());
+  return res.changes > 0;
 }
 
 /**
@@ -622,6 +657,8 @@ module.exports = {
   getLeadTesters,
   recordPurchase,
   addInventoryItem,
+  getUserKeyCount,
+  consumeUserKey,
   getUserInventory,
   getAllInventory,
   getInventoryById,

@@ -637,6 +637,8 @@ app.get('/api/me', async (req, res) => {
     }
   }
 
+  const asxKeyCount = db.getUserKeyCount(dbUser.discord_id, 'asx_case_key');
+
   res.json({
     authenticated: true,
     user: {
@@ -644,10 +646,19 @@ app.get('/api/me', async (req, res) => {
       username: dbUser.username,
       avatar: dbUser.avatar,
       balance_pts: dbUser.balance_pts,
+      asxKeyCount,
       isLeadTester: Boolean(req.session.user.isLeadTester),
       created_at: dbUser.created_at
     }
   });
+});
+
+/**
+ * Get current user's ASX Case Key balance
+ */
+app.get('/api/casino/keys', requireAuth, (req, res) => {
+  const asxKeyCount = db.getUserKeyCount(req.session.user.id, 'asx_case_key');
+  res.json({ success: true, count: asxKeyCount, asxKeyCount });
 });
 
 /**
@@ -1077,7 +1088,7 @@ function generateCaseTape(winner, winningIndex = 35, count = 50) {
   return tape;
 }
 
-const CASE_OPEN_COST = 50;
+const CASE_OPEN_COST = 0;
 
 /**
  * ASX Case Opener Controller
@@ -1089,16 +1100,25 @@ async function handleCaseOpening(req, res) {
       return res.status(404).json({ success: false, error: 'User not found.' });
     }
 
-    const cost = CASE_OPEN_COST;
-    if (user.balance_pts < cost) {
+    const keyCount = db.getUserKeyCount(user.discord_id, 'asx_case_key');
+    if (keyCount < 1) {
       return res.status(400).json({
         success: false,
-        error: `Insufficient PTS balance (Cost: ${cost} PTS, you have ${user.balance_pts} PTS).`
+        error: 'You need an ASX Case Key to open this case! Buy one in the Shop.'
       });
     }
 
-    // Atomically deduct cost
-    db.updateBalance(user.discord_id, -cost);
+    // Atomically consume 1 ASX Case Key
+    const consumed = db.consumeUserKey(user.discord_id, 'asx_case_key');
+    if (!consumed) {
+      return res.status(400).json({
+        success: false,
+        error: 'You need an ASX Case Key to open this case! Buy one in the Shop.'
+      });
+    }
+
+    const remainingKeys = db.getUserKeyCount(user.discord_id, 'asx_case_key');
+    const cost = 0;
 
     // Roll winner and generate 50-item tape with winner strictly at index 35
     const winner = (typeof module.exports.rollCaseWinner === 'function')
@@ -1175,7 +1195,7 @@ async function handleCaseOpening(req, res) {
     }
 
     const updatedUser = db.getUser(user.discord_id);
-    const netChange = winner.reward - cost;
+    const netChange = winner.reward;
 
     // Discord Webhook Logging: Fire embed to #economy-logs ONLY for Covert (Red) and Special Rare (Gold ★) drops.
     // Blue, Purple, and Pink drops must be silent and NOT send any webhook messages.
@@ -1186,8 +1206,8 @@ async function handleCaseOpening(req, res) {
       logger({
         user,
         game: 'ASX Case Opener',
-        bet: cost,
-        multiplier: winner.reward > 0 ? Number((winner.reward / cost).toFixed(2)) : 0,
+        bet: 50,
+        multiplier: winner.reward > 0 ? Number((winner.reward / 50).toFixed(2)) : 0,
         payout: winner.reward,
         netChange,
         newBalance: updatedUser.balance_pts,
@@ -1198,16 +1218,17 @@ async function handleCaseOpening(req, res) {
 
     let messageText = '';
     if (winner.rarity === 'gold') {
-      messageText = `🌟 JACKPOT! You unboxed ${winner.name}! (+${winner.reward} PTS & ${bundleAwarded || 'bundle of choice'} queued to Inventory, Net: +${netChange} PTS)`;
+      messageText = `🌟 JACKPOT! You unboxed ${winner.name}! (+${winner.reward} PTS & ${bundleAwarded || 'bundle of choice'} queued to Inventory)`;
     } else if (itemAwarded) {
       messageText = `Unboxed [${winner.category}] ${winner.name}! Added directly to your Inventory queue.`;
     } else {
-      messageText = `Unboxed [${winner.category}] ${winner.name}! (+${winner.reward} PTS, Net: ${netChange >= 0 ? '+' : ''}${netChange} PTS)`;
+      messageText = `Unboxed [${winner.category}] ${winner.name}! (+${winner.reward} PTS)`;
     }
 
     return res.json({
       success: true,
       cost,
+      remainingKeys,
       winner,
       tape,
       winningIndex,
@@ -1229,6 +1250,20 @@ app.post('/api/lootbox/open', requireAuth, handleCaseOpening);
 
 // Full in-game shop catalog
 const SHOP_CATALOG = {
+  // Case Keys
+  'asx_case_key': {
+    id: 'asx_case_key',
+    name: 'ASX Case Key',
+    price: 50,
+    category: 'Keys',
+    badge: 'Consumable Key',
+    desc: 'Used to unlock the ASX Case Opener. Consumable key.',
+    description: 'Used to unlock the ASX Case Opener. Consumable key.',
+    icon: '🔑',
+    image: '/assets/key.webp',
+    stackable: true
+  },
+
   // In-Game Consumables & Upgrades
   'trait-reroll': {
     id: 'trait-reroll',
@@ -1403,12 +1438,12 @@ app.post('/api/shop/buy', requireAuth, async (req, res) => {
       return res.status(404).json({ success: false, error: 'User not found.' });
     }
 
-    const item = SHOP_CATALOG[itemId];
+    const item = SHOP_CATALOG[itemId] || (itemId === 'asx-case-key' ? SHOP_CATALOG['asx_case_key'] : null);
     if (!item) {
       return res.status(400).json({ success: false, error: 'Unknown shop item.' });
     }
 
-    const isStackable = Boolean(item.stackable || item.category === 'Consumables');
+    const isStackable = Boolean(item.stackable || item.category === 'Consumables' || item.category === 'Keys');
     let quantity = Math.max(1, parseInt(req.body.quantity, 10) || 1);
 
     if (isStackable) {
@@ -1441,13 +1476,28 @@ app.post('/api/shop/buy', requireAuth, async (req, res) => {
       cost: totalCost
     });
 
-    db.addInventoryItem({
-      discord_id: user.discord_id,
-      item_id: item.id,
-      item_name: displayName,
-      category: item.category,
-      price_pts: totalCost
-    });
+    if (item.id === 'asx_case_key') {
+      for (let i = 0; i < quantity; i++) {
+        db.addInventoryItem({
+          discord_id: user.discord_id,
+          item_id: item.id,
+          item_name: item.name,
+          category: item.category || 'Keys',
+          price_pts: item.price,
+          status: 'USABLE'
+        });
+      }
+    } else {
+      db.addInventoryItem({
+        discord_id: user.discord_id,
+        item_id: item.id,
+        item_name: displayName,
+        category: item.category,
+        price_pts: totalCost
+      });
+    }
+
+    const asxKeyCount = db.getUserKeyCount(user.discord_id, 'asx_case_key');
 
     // Fire Discord notification
     dispatchShopWebhook({
@@ -1464,7 +1514,8 @@ app.post('/api/shop/buy', requireAuth, async (req, res) => {
       quantity,
       totalCost,
       newBalance: updatedUser.balance_pts,
-      message: `Purchased ${quantity > 1 ? `${quantity}x ` : ''}"${item.name}" for ${totalCost} PTS! Your reward has been logged for delivery.`
+      asxKeyCount,
+      message: `Purchased ${quantity > 1 ? `${quantity}x ` : ''}"${item.name}" for ${totalCost} PTS! ${item.id === 'asx_case_key' ? 'Key is ready to use in the ASX Case Opener.' : 'Your reward has been logged for delivery.'}`
     });
   } catch (error) {
     console.error('[Shop Buy Error]:', error);
@@ -2095,5 +2146,6 @@ module.exports = {
   rollCaseWinner,
   generateCaseTape,
   CASE_OPEN_COST,
-  handleCaseOpening
+  handleCaseOpening,
+  SHOP_CATALOG
 };

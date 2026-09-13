@@ -198,6 +198,7 @@
         <!-- Category Filters -->
         <div class="shop-filter-bar">
           <button type="button" class="shop-filter-btn active" data-filter="all">All Items</button>
+          <button type="button" class="shop-filter-btn" data-filter="Keys">Keys</button>
           <button type="button" class="shop-filter-btn" data-filter="Consumables">Consumables</button>
           <button type="button" class="shop-filter-btn" data-filter="Units">Units & Rarities</button>
           <button type="button" class="shop-filter-btn" data-filter="Robux & Bundles">Robux & Bundles</button>
@@ -453,11 +454,14 @@
           <!-- Controls Section -->
           <div class="case-controls-bar">
             <div class="case-cost-pill">
-              <span class="cost-label">Price:</span>
+              <span class="cost-label">Key Cost:</span>
               <span class="cost-value">50 PTS</span>
             </div>
+            <div class="case-key-status" id="caseKeyStatus">
+              <span class="key-status-icon">🔑</span> Keys Owned: <span id="asxKeyCount">0</span>
+            </div>
             <button type="button" id="btnOpenCase" class="btn-open-case">
-              <span id="btnOpenCaseText">UNLOCK CASE (50 PTS)</span>
+              <span id="btnOpenCaseText">UNLOCK CASE (1 KEY)</span>
             </button>
           </div>
 
