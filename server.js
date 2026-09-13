@@ -664,8 +664,8 @@ app.get('/api/casino/keys', requireAuth, (req, res) => {
 /**
  * Evaluates the outcome of a 3-reel slot spin.
  * - 3 matching symbols award jackpot multipliers (77x, 30x, 15x, 8x, 5x, 3x).
- * - Any pair of 2 matching symbols awards a 1.5x payout.
- * - 3 distinct symbols result in 0x (No match / loss).
+ * - Two adjacent matching symbols (reels 1&2 or 2&3) award a 1.5x payout.
+ * - Split pairs (reels 1&3) and 3 distinct symbols result in 0x (No match / loss).
  */
 function evaluateSlotSpin(reels, betAmount = 0) {
   const counts = {};
@@ -693,15 +693,10 @@ function evaluateSlotSpin(reels, betAmount = 0) {
     multiplier = 3;
     comboName = '🍒🍒🍒 3 Cherries (3x)';
   } else {
-    // Check if any 2 reels match
-    const hasPair = (reels[0] === reels[1]) || (reels[1] === reels[2]) || (reels[0] === reels[2]);
-    if (hasPair) {
-      let matchedSymbol = null;
-      if (reels[0] === reels[1] || reels[0] === reels[2]) {
-        matchedSymbol = reels[0];
-      } else if (reels[1] === reels[2]) {
-        matchedSymbol = reels[1];
-      }
+    // Check for adjacent pairs only (reels 0 & 1 OR reels 1 & 2). Split pairs (reels 0 & 2) do NOT pay.
+    const isAdjacentPair = (reels[0] === reels[1]) || (reels[1] === reels[2]);
+    if (isAdjacentPair) {
+      const matchedSymbol = (reels[0] === reels[1]) ? reels[0] : reels[1];
       multiplier = 1.5;
       comboName = `Pair of ${matchedSymbol} (1.5x)`;
     }

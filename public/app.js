@@ -883,6 +883,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const SLOT_SYMBOLS = ['🍒', '🍋', '🍇', '🔔', '💎', '7️⃣'];
 
+  // Sync slots paytable display: adjacent symbols required for 1.5x pair payout
+  const slotPayPairElem = document.querySelector('.paytable-grid .pay-item:first-child .pay-syms');
+  if (slotPayPairElem) {
+    slotPayPairElem.textContent = 'Two Adjacent Symbols (1.5x)';
+  }
+
+  /**
+   * Evaluates slot spin client-side win prediction / paytable sync
+   * Two adjacent symbols = 1.5x; split reels 1 & 3 do not pay out.
+   */
+  function predictSlotOutcome(reels, bet = 0) {
+    const isAdjacentPair = (reels[0] === reels[1]) || (reels[1] === reels[2]);
+    if (reels[0] === reels[1] && reels[1] === reels[2]) {
+      return { won: true, multiplier: 3, adjacent: true };
+    }
+    if (isAdjacentPair) {
+      return { won: true, multiplier: 1.5, adjacent: true };
+    }
+    return { won: false, multiplier: 0, adjacent: false };
+  }
+
   slotPresets.forEach(preset => {
     preset.addEventListener('click', () => {
       const betVal = parseInt(preset.getAttribute('data-bet'), 10);
