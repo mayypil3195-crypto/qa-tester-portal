@@ -18,8 +18,8 @@ Production-ready, standalone web portal for the QA Tester Economy system featuri
   * **Home**: Tester overview, live balance pill, and fast navigation shortcuts.
   * **Submit Report**: Report submission form with locked, verified Discord Username and User ID from session.
   * **Shop**: Redeem PTS for cosmetic perks, custom tester roles, color pings, and boosters.
-  * **Casino (Coinflip)**: 50/50 double-or-nothing coinflip mini-game against PTS balance.
-  * **Loot Boxes**: Standard and Rare crate simulation awarding high-yield point payouts and cosmetic rarities.
+  * **Casino (3-Reel Slots)**: Interactive 3-reel slot machine with animated spinning reels (~78.5% RTP, up to 77x jackpot).
+  * **Loot Boxes**: Standard (25 PTS) and Rare (75 PTS) testing crates rebalanced as PTS sinks (~76% RTP).
 * **Discord Webhook Dispatch**:
   * Sends rich Embed notifications to lead reviewers upon submission.
 
@@ -71,7 +71,7 @@ DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 * `GET /auth/logout`: Destroys session and logs out.
 * `GET /api/me`: Returns current user session and PTS balance.
 * `POST /api/request-points`: Submits a point request (session protected).
-* `POST /api/casino/coinflip`: Wagers PTS on Heads or Tails.
-* `POST /api/lootbox/open`: Opens standard or rare crate.
+* `POST /api/casino/spin`: Wagers PTS on 3-reel slot machine (~78.5% RTP).
+* `POST /api/lootbox/open`: Opens standard (25 PTS) or rare (75 PTS) crate.
 * `POST /api/shop/buy`: Purchases role/perk rewards.
 * `GET /health`: Health and uptime check.

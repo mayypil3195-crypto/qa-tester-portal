@@ -421,7 +421,111 @@ app.get('/api/me', (req, res) => {
 });
 
 /**
- * Casino Coinflip Mini-Game
+ * 3-Reel Slot Machine Mini-Game
+ */
+app.post('/api/casino/spin', requireAuth, (req, res) => {
+  try {
+    const { bet } = req.body;
+    const betAmount = parseInt(bet, 10);
+
+    if (isNaN(betAmount) || betAmount <= 0) {
+      return res.status(400).json({ success: false, error: 'Bet must be a positive integer.' });
+    }
+
+    const user = db.getUser(req.session.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+
+    if (user.balance_pts < betAmount) {
+      return res.status(400).json({ success: false, error: `Insufficient PTS balance (You have ${user.balance_pts} PTS).` });
+    }
+
+    // Deduct bet from SQLite immediately
+    db.updateBalance(user.discord_id, -betAmount);
+
+    // Reel symbol weights calibrated to ~78.3% RTP:
+    // 🍒: 42, 🍋: 24, 🍇: 17, 🔔: 10, 💎: 5, 7️⃣: 4 (Total: 102)
+    const symbols = [
+      { symbol: '🍒', weight: 42 },
+      { symbol: '🍋', weight: 24 },
+      { symbol: '🍇', weight: 17 },
+      { symbol: '🔔', weight: 10 },
+      { symbol: '💎', weight: 5 },
+      { symbol: '7️⃣', weight: 4 }
+    ];
+    const totalWeight = symbols.reduce((acc, s) => acc + s.weight, 0);
+
+    function rollSymbol() {
+      let r = Math.random() * totalWeight;
+      for (const s of symbols) {
+        if (r < s.weight) return s.symbol;
+        r -= s.weight;
+      }
+      return symbols[0].symbol;
+    }
+
+    const reels = [rollSymbol(), rollSymbol(), rollSymbol()];
+
+    // Count occurrences
+    const counts = {};
+    for (const s of reels) counts[s] = (counts[s] || 0) + 1;
+
+    let multiplier = 0;
+    let comboName = '';
+
+    if (counts['7️⃣'] === 3) {
+      multiplier = 77;
+      comboName = '7️⃣7️⃣7️⃣ Jackpot (77x)';
+    } else if (counts['💎'] === 3) {
+      multiplier = 30;
+      comboName = '💎💎💎 3 Diamonds (30x)';
+    } else if (counts['🔔'] === 3) {
+      multiplier = 15;
+      comboName = '🔔🔔🔔 3 Bells (15x)';
+    } else if (counts['🍇'] === 3) {
+      multiplier = 8;
+      comboName = '🍇🍇🍇 3 Grapes (8x)';
+    } else if (counts['🍋'] === 3) {
+      multiplier = 5;
+      comboName = '🍋🍋🍋 3 Lemons (5x)';
+    } else if (counts['🍒'] === 3) {
+      multiplier = 3;
+      comboName = '🍒🍒🍒 3 Cherries (3x)';
+    } else if (counts['🍒'] === 2) {
+      multiplier = 1.5;
+      comboName = '🍒🍒 Any Two Cherries (1.5x)';
+    }
+
+    const winAmount = Math.round(betAmount * multiplier);
+    if (winAmount > 0) {
+      db.updateBalance(user.discord_id, winAmount);
+    }
+
+    const netChange = winAmount - betAmount;
+    const updatedUser = db.getUser(user.discord_id);
+
+    return res.json({
+      success: true,
+      reels,
+      bet: betAmount,
+      multiplier,
+      comboName,
+      winAmount,
+      netChange,
+      newBalance: updatedUser.balance_pts,
+      message: multiplier > 0
+        ? `🎉 Winner! ${comboName} pays +${winAmount} PTS (Net: ${netChange >= 0 ? '+' : ''}${netChange} PTS)!`
+        : `No match. You lost ${betAmount} PTS. Spin again!`
+    });
+  } catch (error) {
+    console.error('[Slot Machine Error]:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Internal slot machine error.' });
+  }
+});
+
+/**
+ * Casino Coinflip (Legacy Fallback)
  */
 app.post('/api/casino/coinflip', requireAuth, (req, res) => {
   try {
@@ -446,7 +550,6 @@ app.post('/api/casino/coinflip', requireAuth, (req, res) => {
       return res.status(400).json({ success: false, error: `Insufficient PTS balance (You have ${user.balance_pts} PTS).` });
     }
 
-    // 50% Win Rate
     const outcome = Math.random() < 0.5 ? 'heads' : 'tails';
     const won = (chosenSide === outcome);
     const delta = won ? betAmount : -betAmount;
@@ -470,7 +573,7 @@ app.post('/api/casino/coinflip', requireAuth, (req, res) => {
 });
 
 /**
- * Loot Box Opening Simulation
+ * Loot Box Opening Simulation (Nerfed RTP ~76% PTS Sink)
  */
 app.post('/api/lootbox/open', requireAuth, (req, res) => {
   try {
@@ -486,20 +589,20 @@ app.post('/api/lootbox/open', requireAuth, (req, res) => {
     let pool = [];
 
     if (type === 'standard') {
-      cost = 20;
+      cost = 25;
       pool = [
-        { weight: 50, name: 'Small Bug Bounty Cache', minPts: 10, maxPts: 22, rarity: 'Common' },
-        { weight: 30, name: 'Field Tester Supply Kit', minPts: 25, maxPts: 40, rarity: 'Uncommon' },
-        { weight: 15, name: 'Silver Screwdriver Trophy', minPts: 45, maxPts: 70, rarity: 'Rare' },
-        { weight: 5,  name: 'Lead Reviewer Master Key', minPts: 90, maxPts: 140, rarity: 'Legendary' }
+        { weight: 60, name: 'Basic Testing Log', minPts: 5, maxPts: 12, rarity: 'Common' },
+        { weight: 25, name: 'QA Defect Cache', minPts: 15, maxPts: 22, rarity: 'Uncommon' },
+        { weight: 12, name: 'Bug Hunter Badge', minPts: 30, maxPts: 45, rarity: 'Rare' },
+        { weight: 3,  name: 'Lead Reviewer Commendation', minPts: 75, maxPts: 100, rarity: 'Jackpot' }
       ];
     } else if (type === 'rare') {
-      cost = 60;
+      cost = 75;
       pool = [
-        { weight: 35, name: 'Enhanced Protocol Stash', minPts: 35, maxPts: 65, rarity: 'Uncommon' },
-        { weight: 35, name: 'Cybernetic Defect Scanner', minPts: 70, maxPts: 110, rarity: 'Rare' },
-        { weight: 20, name: 'Elite Tester Commendation', minPts: 120, maxPts: 180, rarity: 'Epic' },
-        { weight: 10, name: 'Apex QA Crown & Relic', minPts: 220, maxPts: 340, rarity: 'Mythic' }
+        { weight: 55, name: 'Standard Component Cache', minPts: 15, maxPts: 35, rarity: 'Common' },
+        { weight: 28, name: 'Diagnostic Toolkit', minPts: 45, maxPts: 65, rarity: 'Uncommon' },
+        { weight: 13, name: 'Cybernetic Scanner', minPts: 90, maxPts: 130, rarity: 'Rare' },
+        { weight: 4,  name: 'Apex QA Trophy', minPts: 200, maxPts: 300, rarity: 'Legendary' }
       ];
     } else {
       return res.status(400).json({ success: false, error: 'Invalid crate type. Must be "standard" or "rare".' });
@@ -537,7 +640,7 @@ app.post('/api/lootbox/open', requireAuth, (req, res) => {
       itemWon: selectedItem.name,
       rarity: selectedItem.rarity,
       newBalance: updatedUser.balance_pts,
-      message: `Opened ${type.toUpperCase()} crate! Unlocked [${selectedItem.rarity}] ${selectedItem.name} for +${rewardPts} PTS (Net: ${netDelta >= 0 ? '+' : ''}${netDelta} PTS).`
+      message: `Opened ${type.toUpperCase()} crate! Received [${selectedItem.rarity}] ${selectedItem.name} with ${rewardPts} PTS (Net: ${netDelta >= 0 ? '+' : ''}${netDelta} PTS).`
     });
   } catch (error) {
     console.error('[Lootbox Error]:', error);

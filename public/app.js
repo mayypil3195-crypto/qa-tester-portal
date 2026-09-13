@@ -6,7 +6,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // Current user session state
   let currentUser = null;
   let activeTab = 'home';
-  let selectedCoinSide = 'heads';
 
   // DOM Elements
   const navbar = document.getElementById('navbar');
@@ -43,15 +42,21 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnText = document.getElementById('btnText');
   const submitAlertBanner = document.getElementById('submitAlertBanner');
 
-  // Casino Elements
-  const coinGraphic = document.getElementById('coinGraphic');
-  const coinFace = document.getElementById('coinFace');
-  const coinOutcomeText = document.getElementById('coinOutcomeText');
-  const sideButtons = document.querySelectorAll('.side-btn');
-  const coinBetInput = document.getElementById('coinBetInput');
+  // Slot Machine Elements
+  const reel0 = document.getElementById('reel0');
+  const reel1 = document.getElementById('reel1');
+  const reel2 = document.getElementById('reel2');
+  const reelWindows = [
+    reel0 ? reel0.closest('.reel-window') : null,
+    reel1 ? reel1.closest('.reel-window') : null,
+    reel2 ? reel2.closest('.reel-window') : null
+  ];
+  const slotBetInput = document.getElementById('slotBetInput');
+  const slotStatusBanner = document.getElementById('slotStatusBanner');
   const betPresets = document.querySelectorAll('.bet-preset');
   const btnMaxBet = document.getElementById('btnMaxBet');
-  const btnFlipCoin = document.getElementById('btnFlipCoin');
+  const btnSpin = document.getElementById('btnSpin');
+  const btnSpinText = document.getElementById('btnSpinText');
 
   // Lootbox Elements
   const crateOpenButtons = document.querySelectorAll('.btn-open-crate');
@@ -95,9 +100,9 @@ document.addEventListener('DOMContentLoaded', () => {
     submitUsername.value = user.username;
     submitDiscordId.value = user.discord_id;
 
-    // Cap casino bet if needed
-    if (coinBetInput && parseInt(coinBetInput.value, 10) > user.balance_pts) {
-      coinBetInput.value = Math.max(1, user.balance_pts);
+    // Cap slot bet if needed
+    if (slotBetInput && parseInt(slotBetInput.value, 10) > user.balance_pts) {
+      slotBetInput.value = Math.max(1, user.balance_pts);
     }
   }
 
@@ -269,90 +274,150 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // ---------------- CASINO COINFLIP ----------------
+  // ---------------- 3-REEL SLOT MACHINE ----------------
 
-  sideButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      sideButtons.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      selectedCoinSide = btn.getAttribute('data-side');
-    });
-  });
+  const SLOT_SYMBOLS = ['🍒', '🍋', '🍇', '🔔', '💎', '7️⃣'];
 
   betPresets.forEach(preset => {
     preset.addEventListener('click', () => {
-      const add = parseInt(preset.getAttribute('data-bet'), 10);
-      if (preset.id === 'btnMaxBet') {
-        coinBetInput.value = currentUser ? Math.max(1, currentUser.balance_pts) : 10;
-      } else {
-        const cur = parseInt(coinBetInput.value, 10) || 0;
-        coinBetInput.value = Math.max(1, cur + add);
+      const betVal = parseInt(preset.getAttribute('data-bet'), 10);
+      if (!isNaN(betVal) && slotBetInput) {
+        slotBetInput.value = betVal;
       }
     });
   });
 
-  if (btnMaxBet) {
+  if (btnMaxBet && slotBetInput) {
     btnMaxBet.addEventListener('click', () => {
-      coinBetInput.value = currentUser ? Math.max(1, currentUser.balance_pts) : 10;
+      slotBetInput.value = currentUser ? Math.max(1, currentUser.balance_pts) : 10;
     });
   }
 
-  btnFlipCoin.addEventListener('click', async () => {
-    const bet = parseInt(coinBetInput.value, 10);
+  let isSpinning = false;
+  if (btnSpin) {
+    btnSpin.addEventListener('click', async () => {
+      if (isSpinning) return;
+      const bet = parseInt(slotBetInput.value, 10);
 
-    if (isNaN(bet) || bet <= 0) {
-      showToast('error', 'Please enter a valid bet amount.');
-      return;
-    }
+      if (isNaN(bet) || bet <= 0) {
+        showToast('error', 'Please enter a valid bet amount.');
+        return;
+      }
 
-    if (currentUser && currentUser.balance_pts < bet) {
-      showToast('error', `Insufficient PTS balance (You have ${currentUser.balance_pts} PTS).`);
-      return;
-    }
+      if (currentUser && currentUser.balance_pts < bet) {
+        showToast('error', `Insufficient PTS balance (You have ${currentUser.balance_pts} PTS).`);
+        return;
+      }
 
-    btnFlipCoin.disabled = true;
-    coinGraphic.classList.add('flipping');
-    coinOutcomeText.textContent = 'Flipping coin...';
+      isSpinning = true;
+      btnSpin.disabled = true;
+      btnSpinText.textContent = 'SPINNING...';
 
-    try {
-      const res = await fetch('/api/casino/coinflip', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bet, side: selectedCoinSide })
+      // Reset banners and visual classes
+      slotStatusBanner.className = 'slot-status-banner';
+      slotStatusBanner.textContent = 'Reels spinning... Good luck!';
+      reelWindows.forEach(w => {
+        if (w) {
+          w.classList.add('spinning');
+          w.classList.remove('locked', 'jackpot-win');
+        }
       });
-      const json = await res.json();
 
-      setTimeout(() => {
-        coinGraphic.classList.remove('flipping');
+      // Rapidly cycle symbols during spin
+      const int0 = setInterval(() => { if (reel0) reel0.textContent = SLOT_SYMBOLS[Math.floor(Math.random() * SLOT_SYMBOLS.length)]; }, 55);
+      const int1 = setInterval(() => { if (reel1) reel1.textContent = SLOT_SYMBOLS[Math.floor(Math.random() * SLOT_SYMBOLS.length)]; }, 55);
+      const int2 = setInterval(() => { if (reel2) reel2.textContent = SLOT_SYMBOLS[Math.floor(Math.random() * SLOT_SYMBOLS.length)]; }, 55);
 
-        if (res.ok && json.success) {
+      try {
+        const res = await fetch('/api/casino/spin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bet })
+        });
+        const json = await res.json();
+
+        if (!res.ok || !json.success) {
+          clearInterval(int0);
+          clearInterval(int1);
+          clearInterval(int2);
+          reelWindows.forEach(w => w && w.classList.remove('spinning'));
+          slotStatusBanner.className = 'slot-status-banner loss';
+          slotStatusBanner.textContent = json.error || 'Spin failed.';
+          showToast('error', json.error || 'Spin failed.');
+          isSpinning = false;
+          btnSpin.disabled = false;
+          btnSpinText.textContent = 'SPIN';
+          return;
+        }
+
+        // Staggered reel stops (800ms, 1250ms, 1700ms) for tension & animation feel
+        setTimeout(() => {
+          clearInterval(int0);
+          if (reel0) reel0.textContent = json.reels[0];
+          if (reelWindows[0]) {
+            reelWindows[0].classList.remove('spinning');
+            reelWindows[0].classList.add('locked');
+          }
+        }, 800);
+
+        setTimeout(() => {
+          clearInterval(int1);
+          if (reel1) reel1.textContent = json.reels[1];
+          if (reelWindows[1]) {
+            reelWindows[1].classList.remove('spinning');
+            reelWindows[1].classList.add('locked');
+          }
+        }, 1250);
+
+        setTimeout(() => {
+          clearInterval(int2);
+          if (reel2) reel2.textContent = json.reels[2];
+          if (reelWindows[2]) {
+            reelWindows[2].classList.remove('spinning');
+            reelWindows[2].classList.add('locked');
+          }
+
+          // All reels locked! Process result
           currentUser.balance_pts = json.newBalance;
           updateUserData(currentUser);
 
-          coinFace.textContent = json.outcome === 'heads' ? '🦅' : '🪙';
-          coinOutcomeText.textContent = `${json.outcome.toUpperCase()}! ${json.message}`;
+          if (json.multiplier > 0) {
+            slotStatusBanner.className = 'slot-status-banner win';
+            slotStatusBanner.textContent = json.message;
+            if (json.multiplier === 77) {
+              reelWindows.forEach(w => w && w.classList.add('jackpot-win'));
+            }
+            showToast('success', json.message);
+          } else {
+            slotStatusBanner.className = 'slot-status-banner loss';
+            slotStatusBanner.textContent = json.message;
+            showToast('error', json.message);
+          }
 
-          showToast(json.won ? 'success' : 'error', json.message);
-        } else {
-          coinOutcomeText.textContent = json.error || 'Failed to flip coin.';
-          showToast('error', json.error || 'Coinflip failed.');
-        }
+          isSpinning = false;
+          btnSpin.disabled = false;
+          btnSpinText.textContent = 'SPIN';
+        }, 1700);
 
-        btnFlipCoin.disabled = false;
-      }, 750);
-    } catch (err) {
-      coinGraphic.classList.remove('flipping');
-      btnFlipCoin.disabled = false;
-      showToast('error', 'Network error during coinflip.');
-    }
-  });
+      } catch (err) {
+        clearInterval(int0);
+        clearInterval(int1);
+        clearInterval(int2);
+        reelWindows.forEach(w => w && w.classList.remove('spinning'));
+        showToast('error', 'Network error during slot spin.');
+        isSpinning = false;
+        btnSpin.disabled = false;
+        btnSpinText.textContent = 'SPIN';
+      }
+    });
+  }
 
   // ---------------- LOOT BOX CRATES ----------------
 
   crateOpenButtons.forEach(btn => {
     btn.addEventListener('click', async () => {
       const crateType = btn.getAttribute('data-crate');
-      const cost = crateType === 'rare' ? 60 : 20;
+      const cost = crateType === 'rare' ? 75 : 25;
 
       if (currentUser && currentUser.balance_pts < cost) {
         showToast('error', `Insufficient balance to open ${crateType} crate (Cost: ${cost} PTS).`);

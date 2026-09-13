@@ -209,40 +209,89 @@
         </div>
       </section>
 
-      <!-- View 4: Casino Coinflip -->
+      <!-- View 4: Casino 3-Reel Slot Machine -->
       <section id="viewCasino" class="view-panel" style="display: none;">
-        <div class="casino-container card">
+        <div class="slot-container card">
           <header class="card-header text-center">
-            <h2 class="card-title">PTS Coinflip</h2>
-            <p class="card-subtitle">Choose Heads or Tails and double your points (50/50 win rate)</p>
+            <h2 class="card-title">Lucky 3-Reel Slots</h2>
+            <p class="card-subtitle">Spin the reels and line up symbols to win up to 77x your bet!</p>
           </header>
 
-          <div class="coin-stage">
-            <div id="coinGraphic" class="coin-visual">
-              <span id="coinFace" class="coin-face">🦅</span>
+          <!-- Slot Machine Visual Housing -->
+          <div class="slot-cabinet">
+            <div class="slot-screen">
+              <div class="reel-box">
+                <div class="reel-window">
+                  <div class="reel-strip" id="reel0">🍒</div>
+                </div>
+                <div class="reel-window">
+                  <div class="reel-strip" id="reel1">🍋</div>
+                </div>
+                <div class="reel-window">
+                  <div class="reel-strip" id="reel2">7️⃣</div>
+                </div>
+              </div>
+              <div class="payline-marker"></div>
             </div>
-            <div id="coinOutcomeText" class="coin-result-text">Pick your side to flip</div>
+
+            <div id="slotStatusBanner" class="slot-status-banner">Select your wager and click SPIN to play!</div>
+
+            <!-- Controls -->
+            <div class="slot-controls">
+              <div class="bet-controls">
+                <label for="slotBetInput" class="form-label">Wager Amount (PTS)</label>
+                <div class="input-with-presets">
+                  <input type="number" id="slotBetInput" class="form-input" min="1" max="10000" value="10">
+                  <div class="quick-bets">
+                    <button type="button" class="bet-preset slot-preset" data-bet="10">10 PTS</button>
+                    <button type="button" class="bet-preset slot-preset" data-bet="25">25 PTS</button>
+                    <button type="button" class="bet-preset slot-preset" data-bet="50">50 PTS</button>
+                    <button type="button" class="bet-preset slot-preset" data-bet="100">100 PTS</button>
+                    <button type="button" class="bet-preset" id="btnMaxBet">Max</button>
+                  </div>
+                </div>
+              </div>
+
+              <button type="button" id="btnSpin" class="btn-spin">
+                <span id="btnSpinText">SPIN</span>
+              </button>
+            </div>
           </div>
 
-          <div class="side-selector">
-            <button type="button" class="side-btn active" data-side="heads">Heads (🦅)</button>
-            <button type="button" class="side-btn" data-side="tails">Tails (🪙)</button>
-          </div>
-
-          <div class="bet-controls">
-            <label for="coinBetInput" class="form-label">Wager Amount (PTS)</label>
-            <div class="input-with-presets">
-              <input type="number" id="coinBetInput" class="form-input" min="1" max="10000" value="10">
-              <div class="quick-bets">
-                <button type="button" class="bet-preset" data-bet="10">+10</button>
-                <button type="button" class="bet-preset" data-bet="25">+25</button>
-                <button type="button" class="bet-preset" data-bet="50">+50</button>
-                <button type="button" class="bet-preset" id="btnMaxBet">Max</button>
+          <!-- Paytable Cheat Sheet -->
+          <div class="paytable-card">
+            <h3 class="paytable-title">Paytable & Multipliers</h3>
+            <div class="paytable-grid">
+              <div class="pay-item">
+                <span class="pay-syms">🍒🍒 Any Two</span>
+                <span class="pay-mult">1.5x</span>
+              </div>
+              <div class="pay-item">
+                <span class="pay-syms">🍒🍒🍒 3 Cherries</span>
+                <span class="pay-mult">3x</span>
+              </div>
+              <div class="pay-item">
+                <span class="pay-syms">🍋🍋🍋 3 Lemons</span>
+                <span class="pay-mult">5x</span>
+              </div>
+              <div class="pay-item">
+                <span class="pay-syms">🍇🍇🍇 3 Grapes</span>
+                <span class="pay-mult">8x</span>
+              </div>
+              <div class="pay-item">
+                <span class="pay-syms">🔔🔔🔔 3 Bells</span>
+                <span class="pay-mult">15x</span>
+              </div>
+              <div class="pay-item">
+                <span class="pay-syms">💎💎💎 3 Diamonds</span>
+                <span class="pay-mult">30x</span>
+              </div>
+              <div class="pay-item jackpot-pay">
+                <span class="pay-syms">7️⃣7️⃣7️⃣ Jackpot</span>
+                <span class="pay-mult">77x</span>
               </div>
             </div>
           </div>
-
-          <button type="button" id="btnFlipCoin" class="btn-primary">Flip Coin</button>
         </div>
       </section>
 
@@ -259,14 +308,14 @@
             <div class="crate-glow"></div>
             <div class="crate-icon-box">📦</div>
             <h3 class="crate-name">Standard Crate</h3>
-            <span class="crate-cost-tag">Cost: 20 PTS</span>
+            <span class="crate-cost-tag">Cost: 25 PTS</span>
             <ul class="crate-drop-list">
-              <li>Common: 10–22 PTS (50%)</li>
-              <li>Uncommon: 25–40 PTS (30%)</li>
-              <li>Rare: 45–70 PTS (15%)</li>
-              <li>Legendary: 90–140 PTS (5%)</li>
+              <li>Common: 5–12 PTS (60%)</li>
+              <li>Uncommon: 15–22 PTS (25%)</li>
+              <li>Rare: 30–45 PTS (12%)</li>
+              <li>Jackpot: 75–100 PTS (3%)</li>
             </ul>
-            <button type="button" class="btn-open-crate" data-crate="standard">Open for 20 PTS</button>
+            <button type="button" class="btn-open-crate" data-crate="standard">Open for 25 PTS</button>
           </div>
 
           <!-- Rare Crate -->
@@ -274,14 +323,14 @@
             <div class="crate-glow rare-glow"></div>
             <div class="crate-icon-box rare-icon">💎</div>
             <h3 class="crate-name">Rare Crate</h3>
-            <span class="crate-cost-tag rare-cost">Cost: 60 PTS</span>
+            <span class="crate-cost-tag rare-cost">Cost: 75 PTS</span>
             <ul class="crate-drop-list">
-              <li>Uncommon: 35–65 PTS (35%)</li>
-              <li>Rare: 70–110 PTS (35%)</li>
-              <li>Epic: 120–180 PTS (20%)</li>
-              <li>Mythic: 220–340 PTS (10%)</li>
+              <li>Common: 15–35 PTS (55%)</li>
+              <li>Uncommon: 45–65 PTS (28%)</li>
+              <li>Rare: 90–130 PTS (13%)</li>
+              <li>Legendary: 200–300 PTS (4%)</li>
             </ul>
-            <button type="button" class="btn-open-crate btn-rare-open" data-crate="rare">Open for 60 PTS</button>
+            <button type="button" class="btn-open-crate btn-rare-open" data-crate="rare">Open for 75 PTS</button>
           </div>
         </div>
 
