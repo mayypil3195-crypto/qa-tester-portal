@@ -25,6 +25,7 @@
             <button type="button" class="nav-btn active" data-tab="home">Home</button>
             <button type="button" class="nav-btn" data-tab="submit">Submit Report</button>
             <button type="button" class="nav-btn" data-tab="shop">Shop</button>
+            <button type="button" class="nav-btn" data-tab="leaderboard">Leaderboard</button>
             <button type="button" class="nav-btn" data-tab="casino">Casino</button>
             <button type="button" class="nav-btn" data-tab="lootbox">Loot Boxes</button>
           </nav>
@@ -86,7 +87,7 @@
           </div>
           <div class="dash-balance-card">
             <span class="balance-label">Current Balance</span>
-            <div class="balance-display"><span id="homeBalance">50</span> <span class="pts-tag">PTS</span></div>
+            <div class="balance-display"><span id="homeBalance">0</span> <span class="pts-tag">PTS</span></div>
           </div>
         </div>
 
@@ -99,17 +100,22 @@
           <div class="quick-card" data-jump="shop">
             <div class="quick-icon">🛍️</div>
             <h3>Reward Shop</h3>
-            <p>Redeem your accumulated PTS for Discord perks and cosmetic roles.</p>
+            <p>Redeem your PTS for in-game units, trait rerolls, and Robux.</p>
+          </div>
+          <div class="quick-card" data-jump="leaderboard">
+            <div class="quick-icon">🏆</div>
+            <h3>Leaderboard</h3>
+            <p>View global tester ranks and competitive PTS standings.</p>
           </div>
           <div class="quick-card" data-jump="casino">
-            <div class="quick-icon">🎲</div>
-            <h3>PTS Coinflip</h3>
-            <p>Wager your test points in a fast, double-or-nothing coinflip.</p>
+            <div class="quick-icon">🎰</div>
+            <h3>Lucky Slots</h3>
+            <p>Spin the 3-reel slot machine to win up to 77x your wager.</p>
           </div>
           <div class="quick-card" data-jump="lootbox">
             <div class="quick-icon">🎁</div>
             <h3>Loot Boxes</h3>
-            <p>Open testing supply crates to win high-yield PTS payouts.</p>
+            <p>Open testing supply crates to unlock bonus PTS rewards.</p>
           </div>
         </div>
       </section>
@@ -159,57 +165,65 @@
         </div>
       </section>
 
-      <!-- View 3: Reward Shop -->
+      <!-- View 3: Full In-Game Reward Shop -->
       <section id="viewShop" class="view-panel" style="display: none;">
         <div class="section-title-wrap">
-          <h2 class="section-title">Perk & Reward Shop</h2>
-          <p class="section-sub">Redeem earned points for server recognitions and perks.</p>
+          <h2 class="section-title">In-Game Tester Shop</h2>
+          <p class="section-sub">Redeem your earned testing PTS for in-game materials, top-tier units, and Robux parity.</p>
         </div>
 
-        <div class="shop-grid">
-          <div class="shop-card card">
-            <div class="shop-icon">🏷️</div>
-            <h3 class="shop-item-name">Custom Tester Role</h3>
-            <p class="shop-item-desc">Personalized custom role title and color on the Discord server.</p>
-            <div class="shop-bottom">
-              <span class="price-pill">150 PTS</span>
-              <button type="button" class="btn-buy" data-item-id="custom-role" data-price="150">Purchase</button>
-            </div>
-          </div>
+        <!-- Category Filters -->
+        <div class="shop-filter-bar">
+          <button type="button" class="shop-filter-btn active" data-filter="all">All Items</button>
+          <button type="button" class="shop-filter-btn" data-filter="Consumables">Consumables</button>
+          <button type="button" class="shop-filter-btn" data-filter="Units">Units & Rarities</button>
+          <button type="button" class="shop-filter-btn" data-filter="Robux & Bundles">Robux & Bundles</button>
+        </div>
 
-          <div class="shop-card card">
-            <div class="shop-icon">🔔</div>
-            <h3 class="shop-item-name">Color Ping Mention</h3>
-            <p class="shop-item-desc">Custom accent highlight styling for testing pings and announcements.</p>
-            <div class="shop-bottom">
-              <span class="price-pill">75 PTS</span>
-              <button type="button" class="btn-buy" data-item-id="color-ping" data-price="75">Purchase</button>
-            </div>
-          </div>
+        <!-- Dynamic/Pre-rendered Shop Items Grid -->
+        <div class="shop-grid" id="shopGrid">
+          <div class="shop-loading-card">Loading full shop catalog...</div>
+        </div>
+      </section>
 
-          <div class="shop-card card">
-            <div class="shop-icon">⚡</div>
-            <h3 class="shop-item-name">Double PTS Booster</h3>
-            <p class="shop-item-desc">Multiplies all PTS rewards from your next approved QA report by 2x.</p>
-            <div class="shop-bottom">
-              <span class="price-pill">200 PTS</span>
-              <button type="button" class="btn-buy" data-item-id="pts-booster" data-price="200">Purchase</button>
-            </div>
+      <!-- View 4: Global Leaderboard -->
+      <section id="viewLeaderboard" class="view-panel" style="display: none;">
+        <div class="section-title-wrap text-between">
+          <div>
+            <h2 class="section-title">Global Tester Leaderboard</h2>
+            <p class="section-sub">Top 20 testers ranked by current PTS balance.</p>
           </div>
+          <button type="button" id="btnRefreshLeaderboard" class="btn-refresh" title="Refresh Leaderboard">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            Refresh
+          </button>
+        </div>
 
-          <div class="shop-card card">
-            <div class="shop-icon">⭐</div>
-            <h3 class="shop-item-name">Discord VIP Badge</h3>
-            <p class="shop-item-desc">Permanent VIP contributor badge displayed in economy logs and portal.</p>
-            <div class="shop-bottom">
-              <span class="price-pill">100 PTS</span>
-              <button type="button" class="btn-buy" data-item-id="vip-badge" data-price="100">Purchase</button>
-            </div>
+        <div class="card leaderboard-card">
+          <div class="table-wrap">
+            <table class="leaderboard-table">
+              <thead>
+                <tr>
+                  <th class="th-rank">Rank</th>
+                  <th class="th-tester">Tester</th>
+                  <th class="th-balance">Balance</th>
+                </tr>
+              </thead>
+              <tbody id="leaderboardTbody">
+                <tr>
+                  <td colspan="3" class="table-loading">Loading standings...</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
 
-      <!-- View 4: Casino 3-Reel Slot Machine -->
+      <!-- View 5: Casino 3-Reel Slot Machine -->
       <section id="viewCasino" class="view-panel" style="display: none;">
         <div class="slot-container card">
           <header class="card-header text-center">
@@ -295,7 +309,7 @@
         </div>
       </section>
 
-      <!-- View 5: Loot Boxes -->
+      <!-- View 6: Loot Boxes -->
       <section id="viewLootbox" class="view-panel" style="display: none;">
         <div class="section-title-wrap">
           <h2 class="section-title">Loot Box Crates</h2>

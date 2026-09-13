@@ -648,10 +648,182 @@ app.post('/api/lootbox/open', requireAuth, (req, res) => {
   }
 });
 
+// Full in-game shop catalog
+const SHOP_CATALOG = {
+  // In-Game Consumables & Upgrades
+  'trait-reroll': {
+    id: 'trait-reroll',
+    name: 'Trait Reroll',
+    price: 75,
+    category: 'Consumables',
+    badge: 'Consumable',
+    desc: 'Reroll unit traits in-game to optimize combat synergies.',
+    icon: '🎲'
+  },
+  'modifier-prism': {
+    id: 'modifier-prism',
+    name: 'Modifier Prism',
+    price: 120,
+    category: 'Consumables',
+    badge: 'Enhancement',
+    desc: 'Alter special unit modifiers and awaken hidden abilities.',
+    icon: '🔮'
+  },
+  'stat-crystal': {
+    id: 'stat-crystal',
+    name: 'Stat Crystal',
+    price: 150,
+    category: 'Consumables',
+    badge: 'Upgrade',
+    desc: 'Permanently boost base unit attack and defense stats.',
+    icon: '💎'
+  },
+  'magical-leaf': {
+    id: 'magical-leaf',
+    name: 'Magical Leaf',
+    price: 250,
+    category: 'Consumables',
+    badge: 'Material',
+    desc: 'Rare evolution catalyst required for high-tier unit ascensions.',
+    icon: '🍃'
+  },
+
+  // Units & Rarities
+  'unit-rare': {
+    id: 'unit-rare',
+    name: 'Rare Unit',
+    price: 150,
+    category: 'Units',
+    badge: 'Rare Tier',
+    desc: 'Guaranteed Rare tier unit delivered directly to your roster.',
+    icon: '⚔️'
+  },
+  'unit-epic': {
+    id: 'unit-epic',
+    name: 'Epic Unit',
+    price: 400,
+    category: 'Units',
+    badge: 'Epic Tier',
+    desc: 'High-impact Epic tier unit featuring advanced skill sets.',
+    icon: '🛡️'
+  },
+  'unit-legendary': {
+    id: 'unit-legendary',
+    name: 'Legendary Unit',
+    price: 900,
+    category: 'Units',
+    badge: 'Legendary Tier',
+    desc: 'Premier Legendary champion with battlefield-altering power.',
+    icon: '👑'
+  },
+  'unit-mythic': {
+    id: 'unit-mythic',
+    name: 'Mythic Unit',
+    price: 2000,
+    category: 'Units',
+    badge: 'Mythic Tier',
+    desc: 'Extremely rare Mythic powerhouse with supreme combat scaling.',
+    icon: '⚡'
+  },
+  'unit-secret': {
+    id: 'unit-secret',
+    name: 'Secret Unit',
+    price: 5000,
+    category: 'Units',
+    badge: 'Secret Tier',
+    desc: 'The ultimate hidden exclusive unit reserved for elite testers.',
+    icon: '🌟'
+  },
+
+  // Robux & Bundles Conversion
+  'skin-bundle': {
+    id: 'skin-bundle',
+    name: 'Skin & Item Bundles',
+    price: 500,
+    category: 'Robux & Bundles',
+    badge: '1:1 Parity',
+    desc: 'Custom in-game bundle parity value (1 PTS = 1 R$ value, 500 R$ package).',
+    icon: '🎁'
+  },
+  'robux-payout': {
+    id: 'robux-payout',
+    name: 'Robux Payout',
+    price: 200,
+    category: 'Robux & Bundles',
+    badge: 'Direct Payout',
+    desc: 'Real Robux transfer (2 PTS = 1 R$, minimum package: 100 R$ for 200 PTS).',
+    icon: '💰'
+  }
+};
+
 /**
- * Shop Catalog Purchase
+ * Dispatches a Discord Webhook notification upon shop purchase
  */
-app.post('/api/shop/buy', requireAuth, (req, res) => {
+async function dispatchShopWebhook(data) {
+  if (!DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL.includes('your_webhook_id')) {
+    return;
+  }
+
+  const { discord_id, username, item, newBalance } = data;
+  const embed = {
+    title: '🛍️ New Shop Purchase',
+    color: 0xf59e0b, // Gold
+    fields: [
+      {
+        name: 'Tester',
+        value: `${username} (<@${discord_id}>)`,
+        inline: true
+      },
+      {
+        name: 'Item Purchased',
+        value: item.name,
+        inline: true
+      },
+      {
+        name: 'Cost',
+        value: `-${item.price} PTS`,
+        inline: true
+      },
+      {
+        name: 'Remaining Balance',
+        value: `${newBalance} PTS`,
+        inline: true
+      }
+    ],
+    footer: {
+      text: `User ID: ${discord_id} • Status: COMPLETED`
+    },
+    timestamp: new Date().toISOString()
+  };
+
+  try {
+    const response = await fetch(DISCORD_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ embeds: [embed] })
+    });
+    if (!response.ok) {
+      console.error('[Shop Webhook Error] Status:', response.status);
+    }
+  } catch (err) {
+    console.error('[Shop Webhook Network Error]:', err.message);
+  }
+}
+
+/**
+ * Get Shop Catalog
+ */
+app.get('/api/shop/catalog', (req, res) => {
+  res.json({
+    success: true,
+    catalog: Object.values(SHOP_CATALOG)
+  });
+});
+
+/**
+ * Shop Item Purchase
+ */
+app.post('/api/shop/buy', requireAuth, async (req, res) => {
   try {
     const { itemId } = req.body;
     const user = db.getUser(req.session.user.id);
@@ -659,33 +831,63 @@ app.post('/api/shop/buy', requireAuth, (req, res) => {
       return res.status(404).json({ success: false, error: 'User not found.' });
     }
 
-    const catalog = {
-      'custom-role': { id: 'custom-role', name: 'Custom Tester Role', price: 150, desc: 'Exclusive custom-named cosmetic role on the Discord server' },
-      'color-ping': { id: 'color-ping', name: 'Color Ping Mention', price: 75, desc: 'Accent highlight color for announcements and task pings' },
-      'pts-booster': { id: 'pts-booster', name: 'Double PTS Booster', price: 200, desc: 'Applies 2x multiplier on your next approved report' },
-      'vip-badge': { id: 'vip-badge', name: 'Discord VIP Badge', price: 100, desc: 'Profile showcase badge displayed in tester logs' }
-    };
-
-    const item = catalog[itemId];
+    const item = SHOP_CATALOG[itemId];
     if (!item) {
       return res.status(400).json({ success: false, error: 'Unknown shop item.' });
     }
 
     if (user.balance_pts < item.price) {
-      return res.status(400).json({ success: false, error: `Insufficient PTS balance (Price: ${item.price} PTS, balance: ${user.balance_pts} PTS).` });
+      return res.status(400).json({
+        success: false,
+        error: `Insufficient PTS balance (Price: ${item.price} PTS, you have ${user.balance_pts} PTS).`
+      });
     }
 
+    // Atomically deduct balance
     const updatedUser = db.updateBalance(user.discord_id, -item.price);
+
+    // Record purchase in database
+    db.recordPurchase({
+      discord_id: user.discord_id,
+      item_id: item.id,
+      item_name: item.name,
+      cost: item.price
+    });
+
+    // Fire Discord notification
+    dispatchShopWebhook({
+      discord_id: user.discord_id,
+      username: user.username,
+      item,
+      newBalance: updatedUser.balance_pts
+    }).catch(err => console.error('[Shop Webhook Dispatch Error]:', err));
 
     return res.json({
       success: true,
       item,
       newBalance: updatedUser.balance_pts,
-      message: `Purchased "${item.name}" for ${item.price} PTS! Lead administrators have logged your perk.`
+      message: `Purchased "${item.name}" for ${item.price} PTS! Your reward has been logged for delivery.`
     });
   } catch (error) {
     console.error('[Shop Buy Error]:', error);
     return res.status(500).json({ success: false, error: error.message || 'Internal shop error.' });
+  }
+});
+
+/**
+ * Leaderboard Ranking Endpoint
+ */
+app.get('/api/leaderboard', (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit, 10) || 20;
+    const leaderboard = db.getLeaderboard(limit);
+    res.json({
+      success: true,
+      leaderboard
+    });
+  } catch (error) {
+    console.error('[Leaderboard API Error]:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve leaderboard.' });
   }
 });
 

@@ -546,34 +546,160 @@ body {
 }
 
 /* ---------------- VIEW 3: SHOP ---------------- */
+.shop-filter-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.shop-filter-btn {
+  background-color: #141824;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  font-family: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  padding: 7px 16px;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.shop-filter-btn:hover {
+  color: var(--text);
+  border-color: #38425d;
+  background-color: #1a2030;
+}
+
+.shop-filter-btn.active {
+  background-color: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
+  box-shadow: 0 2px 10px var(--primary-glow);
+}
+
 .shop-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
 }
 
 .shop-card {
   display: flex;
   flex-direction: column;
-  padding: 22px;
+  padding: 18px;
+  position: relative;
+  transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
 }
 
-.shop-icon {
-  font-size: 1.8rem;
-  margin-bottom: 12px;
+.shop-card:hover {
+  transform: translateY(-2px);
+  border-color: #36415d;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* Dedicated Placeholder Art Slot */
+.shop-art-slot {
+  width: 100%;
+  height: 120px;
+  background: linear-gradient(180deg, #0e121d 0%, #0a0d15 100%);
+  border: 1px dashed rgba(88, 101, 242, 0.35);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin-bottom: 14px;
+  overflow: hidden;
+  transition: border-color var(--transition);
+}
+
+.shop-card:hover .shop-art-slot {
+  border-color: rgba(88, 101, 242, 0.65);
+}
+
+.shop-art-icon {
+  font-size: 2.6rem;
+  line-height: 1;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5));
+}
+
+.art-slot-tag {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: rgba(16, 20, 31, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 2px 6px;
+  border-radius: 4px;
+  backdrop-filter: blur(4px);
+}
+
+.shop-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .shop-item-name {
-  font-size: 1.1rem;
+  font-size: 1.08rem;
   font-weight: 700;
-  margin-bottom: 6px;
+  color: #ffffff;
+}
+
+.shop-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(88, 101, 242, 0.12);
+  border: 1px solid rgba(88, 101, 242, 0.3);
+  color: #7986ff;
+  white-space: nowrap;
+}
+
+.shop-badge.badge-secret {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+}
+
+.shop-badge.badge-mythic {
+  background: rgba(236, 72, 153, 0.15);
+  border-color: rgba(236, 72, 153, 0.4);
+  color: #f472b6;
+}
+
+.shop-badge.badge-legendary {
+  background: rgba(168, 85, 247, 0.15);
+  border-color: rgba(168, 85, 247, 0.4);
+  color: #c084fc;
+}
+
+.shop-badge.badge-robux {
+  background: rgba(46, 160, 67, 0.15);
+  border-color: rgba(46, 160, 67, 0.4);
+  color: #7ee787;
 }
 
 .shop-item-desc {
   font-size: 0.82rem;
   color: var(--text-muted);
   line-height: 1.45;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
   flex: 1;
 }
 
@@ -582,6 +708,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  margin-top: auto;
 }
 
 .price-pill {
@@ -607,9 +734,200 @@ body {
   transition: background-color var(--transition), border-color var(--transition);
 }
 
-.btn-buy:hover {
+.btn-buy:hover:not(:disabled) {
   background-color: var(--primary);
   border-color: var(--primary);
+}
+
+.btn-buy:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.shop-loading-card {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: var(--text-muted);
+  padding: 40px 16px;
+  font-size: 0.95rem;
+}
+
+/* ---------------- VIEW 4: LEADERBOARD ---------------- */
+.text-between {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.btn-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #141824;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.btn-refresh:hover {
+  background: #1a2030;
+  border-color: #38425d;
+  color: var(--text);
+}
+
+.btn-refresh svg {
+  transition: transform 0.4s ease;
+}
+
+.btn-refresh:active svg {
+  transform: rotate(180deg);
+}
+
+.leaderboard-card {
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.leaderboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.leaderboard-table thead th {
+  background-color: #0d1017;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.leaderboard-table tbody td {
+  padding: 12px 20px;
+  border-bottom: 1px solid #161b29;
+  vertical-align: middle;
+  font-size: 0.92rem;
+}
+
+.leaderboard-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.leaderboard-table tbody tr:hover {
+  background-color: rgba(88, 101, 242, 0.04);
+}
+
+.leaderboard-table tbody tr.is-current-user {
+  background-color: rgba(88, 101, 242, 0.09);
+}
+
+.th-rank, .td-rank {
+  width: 80px;
+  text-align: center;
+}
+
+.th-balance, .td-balance {
+  text-align: right;
+  width: 150px;
+  font-weight: 700;
+  color: #7986ff;
+  font-variant-numeric: tabular-nums;
+}
+
+.rank-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-weight: 800;
+  font-size: 0.88rem;
+}
+
+.rank-1 {
+  background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+  color: #0b0e14;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.45);
+}
+
+.rank-2 {
+  background: linear-gradient(135deg, #f1f5f9 0%, #94a3b8 100%);
+  color: #0b0e14;
+  box-shadow: 0 0 12px rgba(226, 232, 240, 0.35);
+}
+
+.rank-3 {
+  background: linear-gradient(135deg, #d97706 0%, #78350f 100%);
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(217, 119, 6, 0.3);
+}
+
+.rank-num {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.86rem;
+}
+
+.tester-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tester-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  object-fit: cover;
+  background-color: #10141f;
+}
+
+.tester-name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tester-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.you-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(88, 101, 242, 0.2);
+  border: 1px solid rgba(88, 101, 242, 0.4);
+  color: #7986ff;
+}
+
+.table-loading, .table-empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 36px 16px;
+  font-size: 0.92rem;
 }
 
 /* ---------------- VIEW 4: CASINO 3-REEL SLOTS ---------------- */

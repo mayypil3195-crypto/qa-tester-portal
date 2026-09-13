@@ -18,7 +18,7 @@ const initSchema = () => {
       discord_id TEXT PRIMARY KEY,
       username TEXT NOT NULL,
       avatar TEXT,
-      balance_pts INTEGER DEFAULT 50,
+      balance_pts INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -34,6 +34,16 @@ const initSchema = () => {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS shop_purchases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      discord_id TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      item_name TEXT NOT NULL,
+      cost INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_users_balance ON users(balance_pts DESC);
     CREATE INDEX IF NOT EXISTS idx_point_requests_status ON point_requests(status);
     CREATE INDEX IF NOT EXISTS idx_point_requests_created_at ON point_requests(created_at DESC);
   `);
@@ -50,7 +60,7 @@ const getUserStmt = db.prepare(`
 
 const upsertUserStmt = db.prepare(`
   INSERT INTO users (discord_id, username, avatar, balance_pts)
-  VALUES (@discord_id, @username, @avatar, 50)
+  VALUES (@discord_id, @username, @avatar, 0)
   ON CONFLICT(discord_id) DO UPDATE SET
     username = excluded.username,
     avatar = excluded.avatar
@@ -60,6 +70,18 @@ const updateBalanceStmt = db.prepare(`
   UPDATE users
   SET balance_pts = balance_pts + ?
   WHERE discord_id = ? AND (balance_pts + ? >= 0)
+`);
+
+const getLeaderboardStmt = db.prepare(`
+  SELECT discord_id, username, avatar, balance_pts
+  FROM users
+  ORDER BY balance_pts DESC, created_at ASC
+  LIMIT ?
+`);
+
+const insertPurchaseStmt = db.prepare(`
+  INSERT INTO shop_purchases (discord_id, item_id, item_name, cost)
+  VALUES (@discord_id, @item_id, @item_name, @cost)
 `);
 
 const insertStmt = db.prepare(`
@@ -97,7 +119,7 @@ function getUser(discordId) {
 }
 
 /**
- * Upserts a user on login. If new, initializes balance to 50 PTS.
+ * Upserts a user on login. Starting balance defaults to 0 PTS.
  * If existing, updates username & avatar while retaining balance.
  * @param {Object} param0 
  * @param {string} param0.discord_id
@@ -141,6 +163,42 @@ function updateBalance(discordId, deltaPoints) {
   }
 
   return getUser(id);
+}
+
+/**
+ * Get top ranking users by balance
+ * @param {number} [limit=20] 
+ * @returns {Array<Object>}
+ */
+function getLeaderboard(limit = 20) {
+  const lim = Math.max(1, Math.min(parseInt(limit, 10) || 20, 100));
+  const rows = getLeaderboardStmt.all(lim);
+  return rows.map((row, index) => ({
+    rank: index + 1,
+    discord_id: row.discord_id,
+    username: row.username,
+    avatar: row.avatar,
+    balance_pts: row.balance_pts
+  }));
+}
+
+/**
+ * Records a shop purchase in the audit log
+ * @param {Object} param0 
+ * @param {string} param0.discord_id
+ * @param {string} param0.item_id
+ * @param {string} param0.item_name
+ * @param {number} param0.cost
+ * @returns {number|bigint}
+ */
+function recordPurchase({ discord_id, item_id, item_name, cost }) {
+  const res = insertPurchaseStmt.run({
+    discord_id: String(discord_id).trim(),
+    item_id: String(item_id).trim(),
+    item_name: String(item_name).trim(),
+    cost: parseInt(cost, 10)
+  });
+  return res.lastInsertRowid;
 }
 
 /**
@@ -200,6 +258,8 @@ module.exports = {
   getUser,
   upsertUser,
   updateBalance,
+  getLeaderboard,
+  recordPurchase,
   createRequest,
   getAllRequests,
   getRequestById,

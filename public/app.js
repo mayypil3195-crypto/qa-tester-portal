@@ -22,6 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
     home: document.getElementById('viewHome'),
     submit: document.getElementById('viewSubmit'),
     shop: document.getElementById('viewShop'),
+    leaderboard: document.getElementById('viewLeaderboard'),
     casino: document.getElementById('viewCasino'),
     lootbox: document.getElementById('viewLootbox')
   };
@@ -67,7 +68,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const lootMessageText = document.getElementById('lootMessageText');
 
   // Shop Elements
-  const shopBuyButtons = document.querySelectorAll('.btn-buy');
+  const shopGrid = document.getElementById('shopGrid');
+  const shopFilterButtons = document.querySelectorAll('.shop-filter-btn');
+  let shopCatalog = [];
+  let currentFilter = 'all';
+
+  // Leaderboard Elements
+  const leaderboardTbody = document.getElementById('leaderboardTbody');
+  const btnRefreshLeaderboard = document.getElementById('btnRefreshLeaderboard');
 
   // ---------------- HELPER FUNCTIONS ----------------
 
@@ -126,6 +134,12 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
+    if (tabName === 'leaderboard') {
+      loadLeaderboard();
+    } else if (tabName === 'shop' && shopCatalog.length === 0) {
+      loadShopCatalog();
+    }
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -141,6 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
         navbar.style.display = 'block';
         views.login.style.display = 'none';
         updateUserData(data.user);
+        loadShopCatalog();
         switchTab('home');
       } else {
         // Unauthenticated -> Show Gatekeeper
@@ -235,44 +250,177 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // ---------------- SHOP ITEM PURCHASE ----------------
+  // ---------------- SHOP CATALOG & PURCHASES ----------------
 
-  shopBuyButtons.forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const itemId = btn.getAttribute('data-item-id');
-      const price = parseInt(btn.getAttribute('data-price'), 10);
+  function getBadgeClass(item) {
+    if (item.id && item.id.includes('secret')) return 'badge-secret';
+    if (item.id && item.id.includes('mythic')) return 'badge-mythic';
+    if (item.id && item.id.includes('legendary')) return 'badge-legendary';
+    if (item.category === 'Robux & Bundles') return 'badge-robux';
+    return '';
+  }
 
-      if (currentUser && currentUser.balance_pts < price) {
-        showToast('error', `Insufficient PTS balance (You need ${price} PTS, you have ${currentUser.balance_pts} PTS).`);
+  function renderShopItems() {
+    if (!shopGrid) return;
+
+    const filtered = (currentFilter === 'all')
+      ? shopCatalog
+      : shopCatalog.filter(item => item.category === currentFilter);
+
+    if (filtered.length === 0) {
+      shopGrid.innerHTML = '<div class="shop-loading-card">No items available in this category.</div>';
+      return;
+    }
+
+    shopGrid.innerHTML = filtered.map(item => `
+      <div class="card shop-card" data-category="${item.category}">
+        <div class="shop-art-slot">
+          <span class="shop-art-icon">${item.icon || '📦'}</span>
+          <span class="art-slot-tag">Art Asset Pending</span>
+        </div>
+        <div class="shop-item-header">
+          <h3 class="shop-item-name">${item.name}</h3>
+          <span class="shop-badge ${getBadgeClass(item)}">${item.badge || item.category}</span>
+        </div>
+        <p class="shop-item-desc">${item.desc}</p>
+        <div class="shop-bottom">
+          <span class="price-pill">${item.price} PTS</span>
+          <button type="button" class="btn-buy" data-item-id="${item.id}" data-price="${item.price}">Purchase</button>
+        </div>
+      </div>
+    `).join('');
+
+    // Attach purchase listeners to dynamic buttons
+    shopGrid.querySelectorAll('.btn-buy').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const itemId = btn.getAttribute('data-item-id');
+        const price = parseInt(btn.getAttribute('data-price'), 10);
+
+        if (currentUser && currentUser.balance_pts < price) {
+          showToast('error', `Insufficient PTS balance (You need ${price} PTS, you have ${currentUser.balance_pts} PTS).`);
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Buying...';
+
+        try {
+          const res = await fetch('/api/shop/buy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ itemId })
+          });
+          const json = await res.json();
+
+          if (res.ok && json.success) {
+            currentUser.balance_pts = json.newBalance;
+            updateUserData(currentUser);
+            showToast('success', json.message);
+          } else {
+            showToast('error', json.error || 'Failed to purchase item.');
+          }
+        } catch (err) {
+          showToast('error', 'Network error during shop purchase.');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Purchase';
+        }
+      });
+    });
+  }
+
+  async function loadShopCatalog() {
+    try {
+      const res = await fetch('/api/shop/catalog');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.catalog)) {
+        shopCatalog = data.catalog;
+        renderShopItems();
+      }
+    } catch (err) {
+      console.error('Failed to load shop catalog:', err);
+      if (shopGrid) {
+        shopGrid.innerHTML = '<div class="shop-loading-card">Failed to load shop items. Please refresh.</div>';
+      }
+    }
+  }
+
+  shopFilterButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      shopFilterButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentFilter = btn.getAttribute('data-filter');
+      renderShopItems();
+    });
+  });
+
+  // ---------------- GLOBAL LEADERBOARD ----------------
+
+  let isLeaderboardLoading = false;
+  async function loadLeaderboard() {
+    if (!leaderboardTbody) return;
+    if (isLeaderboardLoading) return;
+    isLeaderboardLoading = true;
+    leaderboardTbody.innerHTML = '<tr><td colspan="3" class="table-loading">Loading standings...</td></tr>';
+
+    try {
+      const res = await fetch('/api/leaderboard?limit=20');
+      const data = await res.json();
+
+      if (!res.ok || !data.success || !Array.isArray(data.leaderboard) || data.leaderboard.length === 0) {
+        leaderboardTbody.innerHTML = '<tr><td colspan="3" class="table-empty">No tester rankings recorded yet.</td></tr>';
         return;
       }
 
-      btn.disabled = true;
-      btn.textContent = 'Buying...';
-
-      try {
-        const res = await fetch('/api/shop/buy', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ itemId })
-        });
-        const json = await res.json();
-
-        if (res.ok && json.success) {
-          currentUser.balance_pts = json.newBalance;
-          updateUserData(currentUser);
-          showToast('success', json.message);
+      let rowsHtml = '';
+      data.leaderboard.forEach(tester => {
+        const isYou = currentUser && (tester.discord_id === currentUser.discord_id);
+        let rankDisplay = '';
+        if (tester.rank === 1) {
+          rankDisplay = '<span class="rank-pill rank-1" title="1st Place">🥇</span>';
+        } else if (tester.rank === 2) {
+          rankDisplay = '<span class="rank-pill rank-2" title="2nd Place">🥈</span>';
+        } else if (tester.rank === 3) {
+          rankDisplay = '<span class="rank-pill rank-3" title="3rd Place">🥉</span>';
         } else {
-          showToast('error', json.error || 'Failed to purchase item.');
+          rankDisplay = `<span class="rank-num">#${tester.rank}</span>`;
         }
-      } catch (err) {
-        showToast('error', 'Network error during shop purchase.');
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Purchase';
-      }
+
+        const avatar = tester.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
+        const cleanUsername = String(tester.username || 'Tester').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const balanceStr = Number(tester.balance_pts || 0).toLocaleString();
+
+        rowsHtml += `
+          <tr class="${isYou ? 'is-current-user' : ''}">
+            <td class="td-rank">${rankDisplay}</td>
+            <td>
+              <div class="tester-cell">
+                <img src="${avatar}" alt="" class="tester-avatar" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                <div class="tester-name-wrap">
+                  <span class="tester-name">${cleanUsername}</span>
+                  ${isYou ? '<span class="you-tag">You</span>' : ''}
+                </div>
+              </div>
+            </td>
+            <td class="td-balance">${balanceStr} PTS</td>
+          </tr>
+        `;
+      });
+
+      leaderboardTbody.innerHTML = rowsHtml;
+    } catch (err) {
+      console.error('Failed to load leaderboard:', err);
+      leaderboardTbody.innerHTML = '<tr><td colspan="3" class="table-empty">Failed to load leaderboard standings.</td></tr>';
+    } finally {
+      isLeaderboardLoading = false;
+    }
+  }
+
+  if (btnRefreshLeaderboard) {
+    btnRefreshLeaderboard.addEventListener('click', () => {
+      loadLeaderboard();
     });
-  });
+  }
 
   // ---------------- 3-REEL SLOT MACHINE ----------------
 
