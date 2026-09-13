@@ -58,8 +58,12 @@ DISCORD_REDIRECT_URI=http://localhost:3000/auth/discord/callback
 DISCORD_BOT_TOKEN=your_bot_token
 DISCORD_GUILD_ID=your_guild_id
 
-# Discord Webhook Notification (Optional)
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+# Persistent Storage (Optional: defaults to ./requests.db)
+DATABASE_PATH=/data/requests.db
+
+# Discord Webhooks
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/... # Strictly for QA tester reports
+DISCORD_LOGS_WEBHOOK_URL=https://discord.com/api/webhooks/... # Dedicated for audit logs & casino activity
 ```
 
 ---

@@ -7,6 +7,7 @@ const db = require('./database');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL ? process.env.DISCORD_WEBHOOK_URL.trim() : '';
+const DISCORD_LOGS_WEBHOOK_URL = process.env.DISCORD_LOGS_WEBHOOK_URL ? process.env.DISCORD_LOGS_WEBHOOK_URL.trim() : '';
 
 // Trust reverse proxy (Railway, Heroku, etc.)
 app.set('trust proxy', 1);
@@ -73,10 +74,12 @@ function isValidHttpUrl(urlString) {
 }
 
 /**
- * Dispatches an embed notification to Discord Webhook asynchronously
+ * Dispatches an embed notification strictly to Discord Webhook for QA tester point requests.
+ * Uses DISCORD_WEBHOOK_URL ONLY (never bleeds into DISCORD_LOGS_WEBHOOK_URL).
  */
 async function dispatchDiscordWebhook(data, id) {
-  if (!DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL.includes('your_webhook_id')) {
+  const webhookUrl = (process.env.DISCORD_WEBHOOK_URL && process.env.DISCORD_WEBHOOK_URL.trim()) || '';
+  if (!webhookUrl || webhookUrl.includes('your_webhook_id')) {
     console.log(`[Discord Webhook] Skipped for request #${id} (DISCORD_WEBHOOK_URL not configured).`);
     return;
   }
@@ -123,7 +126,7 @@ async function dispatchDiscordWebhook(data, id) {
   };
 
   try {
-    const response = await fetch(DISCORD_WEBHOOK_URL, {
+    const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -142,6 +145,108 @@ async function dispatchDiscordWebhook(data, id) {
   } catch (err) {
     console.error(`[Discord Webhook Network Error] Failed to send notification for request #${id}:`, err.message);
   }
+}
+
+/**
+ * Dispatches an embed or payload to the dedicated system logs webhook (DISCORD_LOGS_WEBHOOK_URL).
+ * Falls back to DISCORD_WEBHOOK_URL if DISCORD_LOGS_WEBHOOK_URL is not configured.
+ */
+async function sendLogWebhook(payload) {
+  const webhookUrl = (process.env.DISCORD_LOGS_WEBHOOK_URL && process.env.DISCORD_LOGS_WEBHOOK_URL.trim())
+    || (process.env.DISCORD_WEBHOOK_URL && process.env.DISCORD_WEBHOOK_URL.trim())
+    || '';
+
+  if (!webhookUrl || webhookUrl.includes('your_webhook_id')) {
+    return;
+  }
+
+  const body = (payload && payload.embeds) ? payload : { embeds: [payload] };
+
+  try {
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '');
+      console.error(`[Logs Webhook Error] Status ${response.status} ${response.statusText}: ${errorBody}`);
+    }
+  } catch (err) {
+    console.error('[Logs Webhook Network Error]:', err.message);
+  }
+}
+
+/**
+ * Logs notable casino outcomes to avoid rate-limiting:
+ * 1. Big Win: multiplier >= 5 or netChange >= 100 (Title: 🎰 Casino Big Win!, Color: Gold 0xFEE75C)
+ * 2. High-Roller Play: bet >= 50 (Title: 🎲 Casino Roll, Color: Green 0x57F287 on win, Charcoal 0x2F3136 on loss)
+ */
+async function logCasinoActivity({ user, game, bet, multiplier, payout, netChange, newBalance }) {
+  const isBigWin = (multiplier >= 5 || netChange >= 100);
+  const isHighRoller = (bet >= 50);
+
+  if (!isBigWin && !isHighRoller) {
+    return;
+  }
+
+  let title;
+  let color;
+
+  if (isBigWin) {
+    title = '🎰 Casino Big Win!';
+    color = 0xFEE75C; // Gold
+  } else {
+    title = '🎲 Casino Roll';
+    color = netChange >= 0 ? 0x57F287 : 0x2F3136; // Green on win, Charcoal on loss
+  }
+
+  const sign = netChange >= 0 ? '+' : '';
+  const embed = {
+    title,
+    color,
+    fields: [
+      {
+        name: 'Player',
+        value: `<@${user.discord_id}> (${user.username})`,
+        inline: true
+      },
+      {
+        name: 'Game',
+        value: game,
+        inline: true
+      },
+      {
+        name: 'Wager',
+        value: `${bet} PTS`,
+        inline: true
+      },
+      {
+        name: 'Outcome',
+        value: `Hit ${multiplier}x | Payout: ${payout} PTS`,
+        inline: true
+      },
+      {
+        name: 'Net',
+        value: `${sign}${netChange} PTS`,
+        inline: true
+      },
+      {
+        name: 'New Balance',
+        value: `${newBalance} PTS`,
+        inline: true
+      }
+    ],
+    footer: {
+      text: `User ID: ${user.discord_id} • Casino Activity`
+    },
+    timestamp: new Date().toISOString()
+  };
+
+  await sendLogWebhook({ embeds: [embed] });
 }
 
 /**
@@ -556,6 +661,17 @@ app.post('/api/casino/spin', requireAuth, (req, res) => {
     const netChange = winAmount - betAmount;
     const updatedUser = db.getUser(user.discord_id);
 
+    // Asynchronously log notable casino activity to logs webhook
+    logCasinoActivity({
+      user,
+      game: '3-Reel Slots',
+      bet: betAmount,
+      multiplier,
+      payout: winAmount,
+      netChange,
+      newBalance: updatedUser.balance_pts
+    }).catch(err => console.error('[Casino Spin Webhook Error]:', err));
+
     return res.json({
       success: true,
       reels,
@@ -671,6 +787,17 @@ app.post('/api/casino/plinko', requireAuth, (req, res) => {
 
     const updatedUser = db.getUser(user.discord_id);
     const netChange = payout - betAmount;
+
+    // Asynchronously log notable casino activity to logs webhook
+    logCasinoActivity({
+      user,
+      game: 'Plinko Arcade',
+      bet: betAmount,
+      multiplier,
+      payout,
+      netChange,
+      newBalance: updatedUser.balance_pts
+    }).catch(err => console.error('[Casino Plinko Webhook Error]:', err));
 
     return res.json({
       success: true,
@@ -879,10 +1006,6 @@ const SHOP_CATALOG = {
  * Dispatches a Discord Webhook notification upon shop purchase
  */
 async function dispatchShopWebhook(data) {
-  if (!DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL.includes('your_webhook_id')) {
-    return;
-  }
-
   const { discord_id, username, item, newBalance } = data;
   const embed = {
     title: '🛍️ New Shop Purchase',
@@ -915,18 +1038,7 @@ async function dispatchShopWebhook(data) {
     timestamp: new Date().toISOString()
   };
 
-  try {
-    const response = await fetch(DISCORD_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ embeds: [embed] })
-    });
-    if (!response.ok) {
-      console.error('[Shop Webhook Error] Status:', response.status);
-    }
-  } catch (err) {
-    console.error('[Shop Webhook Network Error]:', err.message);
-  }
+  await sendLogWebhook({ embeds: [embed] });
 }
 
 /**
@@ -1092,8 +1204,6 @@ app.post('/api/request-points', requireAuth, async (req, res) => {
  * Dispatches Discord Webhook for QA report review verdicts (Approve / Decline)
  */
 async function dispatchReviewWebhook(action, submission, leadUser) {
-  if (!DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL.includes('your_webhook_id')) return;
-
   const isApprove = (action === 'approve');
   const title = isApprove ? '✅ QA Request Approved' : '❌ QA Request Declined';
   const color = isApprove ? 0x57F287 : 0xED4245;
@@ -1121,26 +1231,13 @@ async function dispatchReviewWebhook(action, submission, leadUser) {
     timestamp: new Date().toISOString()
   };
 
-  try {
-    const response = await fetch(DISCORD_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ embeds: [embed] })
-    });
-    if (!response.ok) {
-      console.error('[Review Webhook Error] Status:', response.status);
-    }
-  } catch (err) {
-    console.error('[Review Webhook Network Error]:', err.message);
-  }
+  await sendLogWebhook({ embeds: [embed] });
 }
 
 /**
  * Dispatches Discord Webhook for manual balance adjustments
  */
 async function dispatchGrantWebhook({ targetUser, amount, newBalance, reason, leadUser }) {
-  if (!DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL.includes('your_webhook_id')) return;
-
   const sign = amount >= 0 ? '+' : '';
   const embed = {
     title: '⚖️ Manual Balance Adjustment',
@@ -1158,18 +1255,7 @@ async function dispatchGrantWebhook({ targetUser, amount, newBalance, reason, le
     timestamp: new Date().toISOString()
   };
 
-  try {
-    const response = await fetch(DISCORD_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ embeds: [embed] })
-    });
-    if (!response.ok) {
-      console.error('[Grant Webhook Error] Status:', response.status);
-    }
-  } catch (err) {
-    console.error('[Grant Webhook Network Error]:', err.message);
-  }
+  await sendLogWebhook({ embeds: [embed] });
 }
 
 /**
@@ -1397,7 +1483,8 @@ const server = app.listen(PORT, () => {
   console.log(`[QA Portal] Server running on port ${PORT}`);
   console.log(`[QA Portal] Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`[QA Portal] Database Path: ${db.dbPath}`);
-  console.log(`[QA Portal] Webhook configured: ${Boolean(DISCORD_WEBHOOK_URL && !DISCORD_WEBHOOK_URL.includes('your_webhook_id'))}`);
+  console.log(`[QA Portal] QA Reports Webhook: ${Boolean(process.env.DISCORD_WEBHOOK_URL && !process.env.DISCORD_WEBHOOK_URL.includes('your_webhook_id'))}`);
+  console.log(`[QA Portal] System Logs Webhook: ${Boolean(process.env.DISCORD_LOGS_WEBHOOK_URL && !process.env.DISCORD_LOGS_WEBHOOK_URL.includes('your_webhook_id'))}`);
 });
 
 // Graceful shutdown handling
@@ -1423,4 +1510,4 @@ function handleShutdown(signal) {
 process.on('SIGINT', () => handleShutdown('SIGINT'));
 process.on('SIGTERM', () => handleShutdown('SIGTERM'));
 
-module.exports = { app, server };
+module.exports = { app, server, sendLogWebhook, logCasinoActivity, dispatchDiscordWebhook };
