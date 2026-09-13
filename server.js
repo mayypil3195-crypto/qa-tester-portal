@@ -486,7 +486,8 @@ app.get('/auth/discord/callback', async (req, res) => {
     const dbUser = db.upsertUser({
       discord_id: userData.id,
       username: displayName,
-      avatar: avatarUrl
+      avatar: avatarUrl,
+      is_lead_tester: isLeadTester
     });
 
     req.session.user = {
@@ -524,7 +525,12 @@ if (process.env.ALLOW_DEV_LOGIN === 'true' || process.env.NODE_ENV === 'test') {
     const avatar = req.query.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
     const isLeadTester = req.query.is_lead === 'true' || req.query.lead === 'true';
 
-    const dbUser = db.upsertUser({ discord_id, username, avatar });
+    const dbUser = db.upsertUser({ 
+      discord_id, 
+      username, 
+      avatar,
+      is_lead_tester: isLeadTester
+    });
     req.session.user = {
       id: dbUser.discord_id,
       username: dbUser.username,
@@ -570,7 +576,9 @@ app.get('/api/me', async (req, res) => {
       if (memberRes.ok) {
         const memberData = await memberRes.json();
         const memberRoles = memberData.roles || [];
-        req.session.user.isLeadTester = memberRoles.includes(leadRoleId);
+        const isLead = memberRoles.includes(leadRoleId);
+        req.session.user.isLeadTester = isLead;
+        db.setUserLeadStatus(req.session.user.id, isLead);
       }
     } catch (err) {
       console.warn('[Role Refresh Error]:', err.message);
@@ -664,7 +672,7 @@ app.post('/api/casino/spin', requireAuth, (req, res) => {
       comboName = '🍒🍒🍒 3 Cherries (3x)';
     } else if (counts['🍒'] === 2) {
       multiplier = 1.5;
-      comboName = '🍒🍒 Any Two Cherries (1.5x)';
+      comboName = '🍒🍒 Two Cherries (1.5x)';
     }
 
     const winAmount = Math.round(betAmount * multiplier);
@@ -1133,7 +1141,25 @@ app.post('/api/shop/buy', requireAuth, async (req, res) => {
 app.get('/api/leaderboard', (req, res) => {
   try {
     const limit = parseInt(req.query.limit, 10) || 20;
-    const leaderboard = db.getLeaderboard(limit);
+
+    const excludedIds = new Set();
+
+    // 1. Configured Lead IDs from environment (LEAD_USER_IDS or LEAD_IDS)
+    const envLeadIds = process.env.LEAD_USER_IDS || process.env.LEAD_IDS || '';
+    if (envLeadIds) {
+      envLeadIds.split(/[,\s]+/).forEach(id => {
+        const trimmed = id.trim();
+        if (trimmed) excludedIds.add(trimmed);
+      });
+    }
+
+    // 2. If authenticated caller is a lead tester, exclude them and persist in DB
+    if (req.session && req.session.user && req.session.user.isLeadTester) {
+      excludedIds.add(req.session.user.id);
+      db.setUserLeadStatus(req.session.user.id, true);
+    }
+
+    const leaderboard = db.getLeaderboard(limit, Array.from(excludedIds));
     res.json({
       success: true,
       leaderboard

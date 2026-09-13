@@ -51,6 +51,7 @@ const initSchema = () => {
       username TEXT NOT NULL,
       avatar TEXT,
       balance_pts INTEGER DEFAULT 0,
+      is_lead_tester INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -109,23 +110,33 @@ const initSchema = () => {
     CREATE INDEX IF NOT EXISTS idx_inventory_status ON inventory(status);
     CREATE INDEX IF NOT EXISTS idx_inventory_created_at ON inventory(created_at DESC);
   `);
+
+  try {
+    const userCols = db.prepare(`PRAGMA table_info(users)`).all();
+    if (!userCols.some(col => col.name === 'is_lead_tester')) {
+      db.exec(`ALTER TABLE users ADD COLUMN is_lead_tester INTEGER DEFAULT 0;`);
+    }
+  } catch (err) {
+    console.warn('[DB Users Migration Warning]:', err.message);
+  }
 };
 
 initSchema();
 
 // Prepared statements
 const getUserStmt = db.prepare(`
-  SELECT discord_id, username, avatar, balance_pts, created_at
+  SELECT discord_id, username, avatar, balance_pts, is_lead_tester, created_at
   FROM users
   WHERE discord_id = ?
 `);
 
 const upsertUserStmt = db.prepare(`
-  INSERT INTO users (discord_id, username, avatar, balance_pts)
-  VALUES (@discord_id, @username, @avatar, 0)
+  INSERT INTO users (discord_id, username, avatar, balance_pts, is_lead_tester)
+  VALUES (@discord_id, @username, @avatar, 0, COALESCE(@is_lead_tester, 0))
   ON CONFLICT(discord_id) DO UPDATE SET
     username = excluded.username,
-    avatar = excluded.avatar
+    avatar = excluded.avatar,
+    is_lead_tester = CASE WHEN @is_lead_tester IS NOT NULL THEN @is_lead_tester ELSE users.is_lead_tester END
 `);
 
 const updateBalanceStmt = db.prepare(`
@@ -293,14 +304,25 @@ function getUser(discordId) {
  * @param {string|null} param0.avatar
  * @returns {Object}
  */
-function upsertUser({ discord_id, username, avatar }) {
+function upsertUser({ discord_id, username, avatar, is_lead_tester }) {
   const id = String(discord_id).trim();
   upsertUserStmt.run({
     discord_id: id,
     username: String(username).trim(),
-    avatar: avatar ? String(avatar).trim() : null
+    avatar: avatar ? String(avatar).trim() : null,
+    is_lead_tester: is_lead_tester !== undefined ? (is_lead_tester ? 1 : 0) : null
   });
   return getUser(id);
+}
+
+/**
+ * Set lead status for a user
+ * @param {string} discordId 
+ * @param {boolean} isLead 
+ */
+function setUserLeadStatus(discordId, isLead) {
+  const stmt = db.prepare(`UPDATE users SET is_lead_tester = ? WHERE discord_id = ?`);
+  return stmt.run(isLead ? 1 : 0, String(discordId).trim());
 }
 
 /**
@@ -332,13 +354,38 @@ function updateBalance(discordId, deltaPoints) {
 }
 
 /**
- * Get top ranking users by balance
+ * Get top ranking users by balance, excluding lead QA members
  * @param {number} [limit=20] 
+ * @param {Array<string>} [excludeDiscordIds=[]]
  * @returns {Array<Object>}
  */
-function getLeaderboard(limit = 20) {
+function getLeaderboard(limit = 20, excludeDiscordIds = []) {
   const lim = Math.max(1, Math.min(parseInt(limit, 10) || 20, 100));
-  const rows = getLeaderboardStmt.all(lim);
+
+  const cleanExclude = (Array.isArray(excludeDiscordIds) ? excludeDiscordIds : [])
+    .map(id => String(id).trim())
+    .filter(Boolean);
+
+  let query = `
+    SELECT discord_id, username, avatar, balance_pts
+    FROM users
+    WHERE (is_lead_tester IS NULL OR is_lead_tester = 0)
+  `;
+  const params = [];
+
+  if (cleanExclude.length > 0) {
+    const placeholders = cleanExclude.map(() => '?').join(',');
+    query += ` AND discord_id NOT IN (${placeholders})`;
+    params.push(...cleanExclude);
+  }
+
+  query += `
+    ORDER BY balance_pts DESC, created_at ASC
+    LIMIT ?
+  `;
+  params.push(lim);
+
+  const rows = db.prepare(query).all(...params);
   return rows.map((row, index) => ({
     rank: index + 1,
     discord_id: row.discord_id,
@@ -528,6 +575,7 @@ module.exports = {
   dbPath,
   getUser,
   upsertUser,
+  setUserLeadStatus,
   updateBalance,
   getLeaderboard,
   recordPurchase,
