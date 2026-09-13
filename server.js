@@ -1379,7 +1379,8 @@ const SHOP_CATALOG = {
     category: 'Robux & Bundles',
     badge: 'Direct Payout',
     desc: 'Real Robux transfer (2 PTS = 1 R$, minimum package: 100 R$ for 200 PTS).',
-    icon: '💰'
+    icon: '💰',
+    image: '/assets/Robux_2019_Logo_gold.svg.webp'
   }
 };
 

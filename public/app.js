@@ -356,6 +356,8 @@ document.addEventListener('DOMContentLoaded', () => {
       let artHtml = '';
       if (item.category === 'Units' && item.image) {
         artHtml = `<img src="${item.image}" alt="${item.name}" class="shop-item-img unit-preview-frame" loading="lazy" />`;
+      } else if ((item.id === 'robux-payout' || item.id === 'robux_payout') && item.image) {
+        artHtml = `<img src="${item.image}" alt="${item.name}" class="shop-item-img robux-item-img" loading="lazy" />`;
       } else if (item.image) {
         artHtml = `
           <img src="${item.image}" alt="${item.name}" class="shop-item-img" loading="lazy" onerror="this.onerror=null; this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
