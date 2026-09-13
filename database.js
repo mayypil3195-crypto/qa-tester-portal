@@ -1,11 +1,18 @@
+const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
 
-// Resolve database file path relative to this module
-const DB_PATH = path.join(__dirname, 'requests.db');
+// Resolve database file path with dynamic environment variable support (e.g. Railway volume mount)
+const dbPath = process.env.DATABASE_PATH || path.join(__dirname, 'requests.db');
+
+// Ensure target directory exists before initializing SQLite (e.g. create parent folder if using /data/requests.db)
+const dbDir = path.dirname(dbPath);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
 
 // Initialize better-sqlite3 instance
-const db = new Database(DB_PATH);
+const db = new Database(dbPath);
 
 // Enforce Write-Ahead Logging (WAL) and Foreign Keys
 db.pragma('journal_mode = WAL');
@@ -359,6 +366,7 @@ function close() {
 
 module.exports = {
   db,
+  dbPath,
   getUser,
   upsertUser,
   updateBalance,

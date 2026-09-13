@@ -1396,6 +1396,7 @@ app.get('/health', (req, res) => {
 const server = app.listen(PORT, () => {
   console.log(`[QA Portal] Server running on port ${PORT}`);
   console.log(`[QA Portal] Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`[QA Portal] Database Path: ${db.dbPath}`);
   console.log(`[QA Portal] Webhook configured: ${Boolean(DISCORD_WEBHOOK_URL && !DISCORD_WEBHOOK_URL.includes('your_webhook_id'))}`);
 });
 
