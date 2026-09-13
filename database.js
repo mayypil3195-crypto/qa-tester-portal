@@ -87,10 +87,27 @@ const initSchema = () => {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS inventory (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      discord_id TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      item_name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      price_pts INTEGER NOT NULL,
+      status TEXT DEFAULT 'PENDING',
+      fulfilled_by TEXT,
+      fulfilled_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(discord_id) REFERENCES users(discord_id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_users_balance ON users(balance_pts DESC);
     CREATE INDEX IF NOT EXISTS idx_point_requests_status ON point_requests(status);
     CREATE INDEX IF NOT EXISTS idx_point_requests_created_at ON point_requests(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_inventory_discord_id ON inventory(discord_id);
+    CREATE INDEX IF NOT EXISTS idx_inventory_status ON inventory(status);
+    CREATE INDEX IF NOT EXISTS idx_inventory_created_at ON inventory(created_at DESC);
   `);
 };
 
@@ -169,6 +186,92 @@ const getAuditLogsStmt = db.prepare(`
   FROM audit_logs
   ORDER BY id DESC
   LIMIT ?
+`);
+
+const insertInventoryStmt = db.prepare(`
+  INSERT INTO inventory (discord_id, item_id, item_name, category, price_pts, status)
+  VALUES (@discord_id, @item_id, @item_name, @category, @price_pts, 'PENDING')
+`);
+
+const getUserInventoryStmt = db.prepare(`
+  SELECT id, discord_id, item_id, item_name, category, price_pts, status, fulfilled_by, fulfilled_at, created_at
+  FROM inventory
+  WHERE discord_id = ?
+  ORDER BY created_at DESC, id DESC
+`);
+
+const getAllInventoryStmt = db.prepare(`
+  SELECT 
+    inv.id,
+    inv.discord_id,
+    inv.item_id,
+    inv.item_name,
+    inv.category,
+    inv.price_pts,
+    inv.status,
+    inv.fulfilled_by,
+    inv.fulfilled_at,
+    inv.created_at,
+    u.username,
+    u.avatar
+  FROM inventory inv
+  LEFT JOIN users u ON inv.discord_id = u.discord_id
+  ORDER BY 
+    CASE WHEN inv.status = 'PENDING' THEN 0 ELSE 1 END,
+    inv.created_at DESC,
+    inv.id DESC
+  LIMIT ?
+`);
+
+const getPendingInventoryStmt = db.prepare(`
+  SELECT 
+    inv.id,
+    inv.discord_id,
+    inv.item_id,
+    inv.item_name,
+    inv.category,
+    inv.price_pts,
+    inv.status,
+    inv.fulfilled_by,
+    inv.fulfilled_at,
+    inv.created_at,
+    u.username,
+    u.avatar
+  FROM inventory inv
+  LEFT JOIN users u ON inv.discord_id = u.discord_id
+  WHERE inv.status = 'PENDING'
+  ORDER BY inv.created_at DESC, inv.id DESC
+  LIMIT ?
+`);
+
+const getInventoryByIdStmt = db.prepare(`
+  SELECT 
+    inv.id,
+    inv.discord_id,
+    inv.item_id,
+    inv.item_name,
+    inv.category,
+    inv.price_pts,
+    inv.status,
+    inv.fulfilled_by,
+    inv.fulfilled_at,
+    inv.created_at,
+    u.username,
+    u.avatar
+  FROM inventory inv
+  LEFT JOIN users u ON inv.discord_id = u.discord_id
+  WHERE inv.id = ?
+`);
+
+const fulfillInventoryStmt = db.prepare(`
+  UPDATE inventory
+  SET status = 'FULFILLED', fulfilled_by = ?, fulfilled_at = CURRENT_TIMESTAMP
+  WHERE id = ?
+`);
+
+const deleteInventoryStmt = db.prepare(`
+  DELETE FROM inventory
+  WHERE id = ?
 `);
 
 /**
@@ -356,6 +459,62 @@ function getAuditLogs(limit = 50) {
 }
 
 /**
+ * Adds an item to the player inventory with status PENDING
+ */
+function addInventoryItem({ discord_id, item_id, item_name, category, price_pts }) {
+  const res = insertInventoryStmt.run({
+    discord_id: String(discord_id).trim(),
+    item_id: String(item_id).trim(),
+    item_name: String(item_name).trim(),
+    category: String(category || 'General').trim(),
+    price_pts: parseInt(price_pts, 10)
+  });
+  return res.lastInsertRowid;
+}
+
+/**
+ * Get a specific user's inventory
+ */
+function getUserInventory(discordId) {
+  if (!discordId) return [];
+  return getUserInventoryStmt.all(String(discordId).trim());
+}
+
+/**
+ * Get all inventory records for lead queue
+ */
+function getAllInventory(statusFilter = 'ALL', limit = 200) {
+  const lim = Math.max(1, Math.min(parseInt(limit, 10) || 200, 500));
+  if (String(statusFilter).toUpperCase() === 'PENDING') {
+    return getPendingInventoryStmt.all(lim);
+  }
+  return getAllInventoryStmt.all(lim);
+}
+
+/**
+ * Get a single inventory item by ID
+ */
+function getInventoryById(id) {
+  return getInventoryByIdStmt.get(parseInt(id, 10));
+}
+
+/**
+ * Fulfill an inventory item
+ */
+function fulfillInventoryItem(id, fulfilledByDiscordId) {
+  const res = fulfillInventoryStmt.run(String(fulfilledByDiscordId).trim(), parseInt(id, 10));
+  return res.changes > 0;
+}
+
+/**
+ * Delete / revoke an inventory item
+ */
+function deleteInventoryItem(id) {
+  const res = deleteInventoryStmt.run(parseInt(id, 10));
+  return res.changes > 0;
+}
+
+/**
  * Gracefully close database connection.
  */
 function close() {
@@ -372,6 +531,12 @@ module.exports = {
   updateBalance,
   getLeaderboard,
   recordPurchase,
+  addInventoryItem,
+  getUserInventory,
+  getAllInventory,
+  getInventoryById,
+  fulfillInventoryItem,
+  deleteInventoryItem,
   createRequest,
   getAllRequests,
   getRequestById,

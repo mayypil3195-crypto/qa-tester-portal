@@ -1494,8 +1494,8 @@ body {
   letter-spacing: 0.04em;
 }
 
-.sub-filter-btn {
-  background: #151a28;
+.sub-filter-btn, .ful-filter-btn {
+  background: #151a27;
   border: 1px solid var(--border);
   color: var(--text-muted);
   font-family: inherit;
@@ -1507,12 +1507,12 @@ body {
   transition: all var(--transition);
 }
 
-.sub-filter-btn:hover {
+.sub-filter-btn:hover, .ful-filter-btn:hover {
   color: var(--text);
   border-color: #38425d;
 }
 
-.sub-filter-btn.active {
+.sub-filter-btn.active, .ful-filter-btn.active {
   background: #232c42;
   border-color: #5865f2;
   color: #ffffff;
@@ -1558,13 +1558,13 @@ body {
   white-space: nowrap;
 }
 
-.status-pending {
+.status-pending, .status-pending-delivery {
   background: rgba(245, 158, 11, 0.15);
   border: 1px solid rgba(245, 158, 11, 0.4);
   color: #fbbf24;
 }
 
-.status-approved {
+.status-approved, .status-delivered, .status-fulfilled {
   background: rgba(46, 160, 67, 0.15);
   border: 1px solid rgba(46, 160, 67, 0.4);
   color: #7ee787;
@@ -1626,6 +1626,49 @@ body {
   transform: none;
 }
 
+.btn-fulfill {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  border: none;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.btn-fulfill:hover:not(:disabled) {
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.4);
+  transform: translateY(-1px);
+}
+
+.btn-revoke {
+  background: rgba(248, 81, 73, 0.12);
+  color: #ff7b72;
+  border: 1px solid rgba(248, 81, 73, 0.4);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.btn-revoke:hover:not(:disabled) {
+  background: #da3633;
+  color: #ffffff;
+  border-color: #da3633;
+}
+
+.btn-fulfill:disabled, .btn-revoke:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .reviewed-label {
   font-size: 0.8rem;
   font-weight: 600;
@@ -1671,6 +1714,18 @@ body {
   background: rgba(88, 101, 242, 0.15);
   border: 1px solid rgba(88, 101, 242, 0.4);
   color: #7986ff;
+}
+
+.action-fulfill {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+}
+
+.action-revoke {
+  background: rgba(248, 81, 73, 0.15);
+  border: 1px solid rgba(248, 81, 73, 0.4);
+  color: #ff7b72;
 }
 
 .pts-plus {

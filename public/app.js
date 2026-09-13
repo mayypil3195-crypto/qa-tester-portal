@@ -22,6 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
     home: document.getElementById('viewHome'),
     submit: document.getElementById('viewSubmit'),
     shop: document.getElementById('viewShop'),
+    inventory: document.getElementById('viewInventory'),
     leaderboard: document.getElementById('viewLeaderboard'),
     casino: document.getElementById('viewCasino'),
     lootbox: document.getElementById('viewLootbox'),
@@ -88,6 +89,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let shopCatalog = [];
   let currentFilter = 'all';
 
+  // Inventory Elements
+  const inventoryTbody = document.getElementById('inventoryTbody');
+  const btnRefreshInventory = document.getElementById('btnRefreshInventory');
+
   // Leaderboard Elements
   const leaderboardTbody = document.getElementById('leaderboardTbody');
   const btnRefreshLeaderboard = document.getElementById('btnRefreshLeaderboard');
@@ -98,11 +103,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnRefreshAdmin = document.getElementById('btnRefreshAdmin');
   const adminSubnavBtns = document.querySelectorAll('.admin-subnav-btn');
   const adminTabSubmissions = document.getElementById('adminTabSubmissions');
+  const adminTabFulfillment = document.getElementById('adminTabFulfillment');
   const adminTabPtsManager = document.getElementById('adminTabPtsManager');
   const adminTabAuditLogs = document.getElementById('adminTabAuditLogs');
   const pendingSubmissionsBadge = document.getElementById('pendingSubmissionsBadge');
+  const pendingFulfillmentBadge = document.getElementById('pendingFulfillmentBadge');
   const subFilterBtns = document.querySelectorAll('.sub-filter-btn');
+  const fulFilterBtns = document.querySelectorAll('.ful-filter-btn');
   const adminSubmissionsTbody = document.getElementById('adminSubmissionsTbody');
+  const adminFulfillmentTbody = document.getElementById('adminFulfillmentTbody');
   const grantTargetUser = document.getElementById('grantTargetUser');
   const formGrantPts = document.getElementById('formGrantPts');
   const grantAmountInput = document.getElementById('grantAmount');
@@ -183,6 +192,8 @@ document.addEventListener('DOMContentLoaded', () => {
       loadLeaderboard();
     } else if (tabName === 'shop' && shopCatalog.length === 0) {
       loadShopCatalog();
+    } else if (tabName === 'inventory') {
+      loadUserInventory();
     } else if (tabName === 'admin') {
       loadAdminData();
     } else if (tabName === 'casino' && currentCasinoMode === 'plinko') {
@@ -402,6 +413,52 @@ document.addEventListener('DOMContentLoaded', () => {
       renderShopItems();
     });
   });
+
+  // ---------------- PLAYER INVENTORY ----------------
+
+  async function loadUserInventory() {
+    if (!inventoryTbody) return;
+    inventoryTbody.innerHTML = '<tr><td colspan="6" class="table-loading">Loading inventory...</td></tr>';
+
+    try {
+      const res = await fetch('/api/inventory/me');
+      const data = await res.json();
+
+      if (data.success && Array.isArray(data.inventory)) {
+        if (data.inventory.length === 0) {
+          inventoryTbody.innerHTML = '<tr><td colspan="6" class="table-empty">No items in your inventory yet. Visit the Shop to redeem rewards!</td></tr>';
+          return;
+        }
+
+        inventoryTbody.innerHTML = data.inventory.map(item => {
+          const isPending = (item.status === 'PENDING');
+          const statusClass = isPending ? 'status-pending-delivery' : 'status-delivered';
+          const statusText = isPending ? '⏳ Pending Delivery' : '✅ Delivered In-Game';
+
+          return `
+            <tr>
+              <td style="font-weight: 700; color: var(--text-muted);">#${item.id}</td>
+              <td style="font-weight: 600; color: var(--text);">${String(item.item_name).replace(/</g, '&lt;')}</td>
+              <td><span style="font-size: 0.82rem; color: var(--text-muted);">${String(item.category).replace(/</g, '&lt;')}</span></td>
+              <td style="font-weight: 700; color: #7986ff;">${item.price_pts} PTS</td>
+              <td><span class="status-pill ${statusClass}">${statusText}</span></td>
+              <td style="font-size: 0.8rem; color: var(--text-muted);">${item.created_at || '—'}</td>
+            </tr>
+          `;
+        }).join('');
+      } else {
+        inventoryTbody.innerHTML = '<tr><td colspan="6" class="table-empty">Failed to load inventory.</td></tr>';
+      }
+    } catch (err) {
+      inventoryTbody.innerHTML = '<tr><td colspan="6" class="table-empty">Error fetching inventory.</td></tr>';
+    }
+  }
+
+  if (btnRefreshInventory) {
+    btnRefreshInventory.addEventListener('click', () => {
+      loadUserInventory();
+    });
+  }
 
   // ---------------- GLOBAL LEADERBOARD ----------------
 
@@ -1215,6 +1272,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let activeAdminTab = 'submissions';
   let subStatusFilter = 'PENDING';
   let cachedSubmissions = [];
+  let fulStatusFilter = 'PENDING';
+  let cachedInventory = [];
 
   function switchAdminTab(tab) {
     activeAdminTab = tab;
@@ -1222,10 +1281,12 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.classList.toggle('active', btn.getAttribute('data-admin-tab') === tab);
     });
     if (adminTabSubmissions) adminTabSubmissions.style.display = (tab === 'submissions') ? 'block' : 'none';
+    if (adminTabFulfillment) adminTabFulfillment.style.display = (tab === 'fulfillment') ? 'block' : 'none';
     if (adminTabPtsManager) adminTabPtsManager.style.display = (tab === 'pts-manager') ? 'block' : 'none';
     if (adminTabAuditLogs) adminTabAuditLogs.style.display = (tab === 'audit-logs') ? 'block' : 'none';
 
     if (tab === 'submissions') loadAdminSubmissions();
+    else if (tab === 'fulfillment') loadAdminFulfillment();
     else if (tab === 'pts-manager') loadAdminUsers();
     else if (tab === 'audit-logs') loadAdminLogs();
   }
@@ -1359,6 +1420,146 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // --- Fulfillment Queue Handlers ---
+  fulFilterBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      fulFilterBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      fulStatusFilter = btn.getAttribute('data-ful-filter');
+      loadAdminFulfillment();
+    });
+  });
+
+  async function loadAdminFulfillment() {
+    if (!adminFulfillmentTbody) return;
+    adminFulfillmentTbody.innerHTML = '<tr><td colspan="8" class="table-loading">Loading fulfillment queue...</td></tr>';
+
+    try {
+      const res = await fetch(`/api/admin/inventory?status=${fulStatusFilter}`);
+      const data = await res.json();
+
+      if (data.success && Array.isArray(data.inventory)) {
+        cachedInventory = data.inventory;
+        renderAdminFulfillmentTable();
+      } else {
+        adminFulfillmentTbody.innerHTML = '<tr><td colspan="8" class="table-empty">Failed to load fulfillment queue.</td></tr>';
+      }
+    } catch (err) {
+      adminFulfillmentTbody.innerHTML = '<tr><td colspan="8" class="table-empty">Error fetching fulfillment queue.</td></tr>';
+    }
+  }
+
+  function renderAdminFulfillmentTable() {
+    if (!adminFulfillmentTbody) return;
+
+    if (fulStatusFilter === 'PENDING' && pendingFulfillmentBadge) {
+      pendingFulfillmentBadge.textContent = cachedInventory.length;
+      pendingFulfillmentBadge.classList.toggle('zero', cachedInventory.length === 0);
+    }
+
+    const list = cachedInventory;
+    if (list.length === 0) {
+      adminFulfillmentTbody.innerHTML = `<tr><td colspan="8" class="table-empty">No ${fulStatusFilter === 'PENDING' ? 'pending' : ''} items in fulfillment queue.</td></tr>`;
+      return;
+    }
+
+    adminFulfillmentTbody.innerHTML = list.map(item => {
+      const isPending = (item.status === 'PENDING');
+      const statusClass = isPending ? 'status-pending-delivery' : 'status-delivered';
+      const statusText = isPending ? '⏳ Pending Delivery' : '✅ Delivered In-Game';
+
+      const actionsHtml = isPending ? `
+        <div class="review-actions-wrap">
+          <button type="button" class="btn-fulfill" data-id="${item.id}">Mark Delivered</button>
+          <button type="button" class="btn-revoke" data-id="${item.id}">Revoke</button>
+        </div>
+      ` : `
+        <div class="review-actions-wrap">
+          <span class="reviewed-label">Delivered</span>
+          <button type="button" class="btn-revoke" data-id="${item.id}" style="margin-left: 6px;">Revoke</button>
+        </div>
+      `;
+
+      return `
+        <tr>
+          <td style="font-weight: 700; color: var(--text-muted);">#${item.id}</td>
+          <td>
+            <div class="tester-name-wrap">
+              <span class="tester-name">${String(item.username || 'Tester').replace(/</g, '&lt;')}</span>
+              <span style="font-size: 0.72rem; color: var(--text-muted);">${item.discord_id}</span>
+            </div>
+          </td>
+          <td style="font-weight: 600; color: var(--text);">${String(item.item_name).replace(/</g, '&lt;')}</td>
+          <td><span style="font-size: 0.82rem; color: var(--text-muted);">${String(item.category).replace(/</g, '&lt;')}</span></td>
+          <td style="font-weight: 700; color: #7986ff;">${item.price_pts} PTS</td>
+          <td><span class="status-pill ${statusClass}">${statusText}</span></td>
+          <td style="font-size: 0.78rem; color: var(--text-muted); white-space: nowrap;">${item.created_at || '—'}</td>
+          <td style="text-align: right;">${actionsHtml}</td>
+        </tr>
+      `;
+    }).join('');
+
+    adminFulfillmentTbody.querySelectorAll('.btn-fulfill').forEach(btn => {
+      btn.addEventListener('click', () => handleFulfillAction(btn.getAttribute('data-id'), btn));
+    });
+
+    adminFulfillmentTbody.querySelectorAll('.btn-revoke').forEach(btn => {
+      btn.addEventListener('click', () => handleRevokeAction(btn.getAttribute('data-id'), btn));
+    });
+  }
+
+  async function handleFulfillAction(id, buttonEl) {
+    if (!confirm(`Mark item #${id} as delivered in-game to tester?`)) return;
+
+    if (buttonEl) buttonEl.disabled = true;
+
+    try {
+      const res = await fetch(`/api/admin/inventory/${id}/fulfill`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        showToast('success', data.message || `Item #${id} delivered!`);
+        loadAdminFulfillment();
+        updateAdminBadges();
+      } else {
+        showToast('error', data.error || 'Failed to mark item as fulfilled.');
+      }
+    } catch (err) {
+      showToast('error', 'Network error fulfilling item.');
+    } finally {
+      if (buttonEl) buttonEl.disabled = false;
+    }
+  }
+
+  async function handleRevokeAction(id, buttonEl) {
+    if (!confirm(`Are you sure you want to REVOKE / DELETE inventory record #${id}?`)) return;
+
+    if (buttonEl) buttonEl.disabled = true;
+
+    try {
+      const res = await fetch(`/api/admin/inventory/${id}/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        showToast('success', data.message || `Item #${id} revoked.`);
+        loadAdminFulfillment();
+        updateAdminBadges();
+      } else {
+        showToast('error', data.error || 'Failed to revoke item.');
+      }
+    } catch (err) {
+      showToast('error', 'Network error revoking item.');
+    } finally {
+      if (buttonEl) buttonEl.disabled = false;
+    }
+  }
+
   async function loadAdminUsers() {
     if (!grantTargetUser) return;
     try {
@@ -1450,6 +1651,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (log.action_type === 'REPORT_APPROVE') actionClass = 'action-approve';
         else if (log.action_type === 'REPORT_DECLINE') actionClass = 'action-decline';
         else if (log.action_type === 'SHOP_PURCHASE') actionClass = 'action-purchase';
+        else if (log.action_type === 'ITEM_FULFILL') actionClass = 'action-fulfill';
+        else if (log.action_type === 'ITEM_REVOKE') actionClass = 'action-revoke';
 
         const deltaPts = log.delta_pts || 0;
         const deltaClass = deltaPts > 0 ? 'pts-plus' : (deltaPts < 0 ? 'pts-minus' : 'pts-neutral');
@@ -1472,10 +1675,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  async function updateAdminBadges() {
+    try {
+      const [resSub, resInv] = await Promise.all([
+        fetch('/api/admin/submissions'),
+        fetch('/api/admin/inventory?status=PENDING')
+      ]);
+      const dataSub = await resSub.json();
+      const dataInv = await resInv.json();
+
+      if (dataSub.success && Array.isArray(dataSub.submissions) && pendingSubmissionsBadge) {
+        const pendingSubs = dataSub.submissions.filter(s => s.status === 'PENDING').length;
+        pendingSubmissionsBadge.textContent = pendingSubs;
+        pendingSubmissionsBadge.classList.toggle('zero', pendingSubs === 0);
+      }
+
+      if (dataInv.success && Array.isArray(dataInv.inventory) && pendingFulfillmentBadge) {
+        const pendingCount = dataInv.inventory.length;
+        pendingFulfillmentBadge.textContent = pendingCount;
+        pendingFulfillmentBadge.classList.toggle('zero', pendingCount === 0);
+      }
+    } catch (err) {
+      console.warn('[Badge update error]:', err.message);
+    }
+  }
+
   function loadAdminData() {
     if (activeAdminTab === 'submissions') loadAdminSubmissions();
+    else if (activeAdminTab === 'fulfillment') loadAdminFulfillment();
     else if (activeAdminTab === 'pts-manager') loadAdminUsers();
     else if (activeAdminTab === 'audit-logs') loadAdminLogs();
+    updateAdminBadges();
   }
 
   if (btnRefreshAdmin) {

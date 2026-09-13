@@ -25,6 +25,7 @@
             <button type="button" class="nav-btn active" data-tab="home">Home</button>
             <button type="button" class="nav-btn" data-tab="submit">Submit Report</button>
             <button type="button" class="nav-btn" data-tab="shop">Shop</button>
+            <button type="button" class="nav-btn" data-tab="inventory">🎒 Inventory</button>
             <button type="button" class="nav-btn" data-tab="leaderboard">Leaderboard</button>
             <button type="button" class="nav-btn" data-tab="casino">Casino</button>
             <button type="button" class="nav-btn" data-tab="lootbox">Loot Boxes</button>
@@ -104,6 +105,11 @@
             <div class="quick-icon">🛍️</div>
             <h3>Reward Shop</h3>
             <p>Redeem your PTS for in-game units, trait rerolls, and Robux.</p>
+          </div>
+          <div class="quick-card" data-jump="inventory">
+            <div class="quick-icon">🎒</div>
+            <h3>My Inventory</h3>
+            <p>View your purchased in-game items, units, and delivery statuses.</p>
           </div>
           <div class="quick-card" data-jump="leaderboard">
             <div class="quick-icon">🏆</div>
@@ -191,6 +197,46 @@
         <!-- Dynamic/Pre-rendered Shop Items Grid -->
         <div class="shop-grid" id="shopGrid">
           <div class="shop-loading-card">Loading full shop catalog...</div>
+        </div>
+      </section>
+
+      <!-- View: Player Inventory -->
+      <section id="viewInventory" class="view-panel" style="display: none;">
+        <div class="section-title-wrap text-between">
+          <div>
+            <h2 class="section-title">Player Inventory</h2>
+            <p class="section-sub">Track all purchased in-game items, units, and delivery statuses from Lead QA.</p>
+          </div>
+          <button type="button" id="btnRefreshInventory" class="btn-refresh" title="Refresh Inventory">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            Refresh
+          </button>
+        </div>
+
+        <div class="card leaderboard-card inventory-card">
+          <div class="table-wrap">
+            <table class="leaderboard-table inventory-table">
+              <thead>
+                <tr>
+                  <th style="width: 70px;">ID</th>
+                  <th style="min-width: 180px;">Item Name</th>
+                  <th style="width: 130px;">Category</th>
+                  <th style="width: 100px;">Price</th>
+                  <th style="width: 160px;">Delivery Status</th>
+                  <th style="min-width: 160px;">Purchased Date</th>
+                </tr>
+              </thead>
+              <tbody id="inventoryTbody">
+                <tr>
+                  <td colspan="6" class="table-loading">Loading inventory...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -446,6 +492,9 @@
           <button type="button" class="admin-subnav-btn active" data-admin-tab="submissions">
             Submissions Queue <span id="pendingSubmissionsBadge" class="tab-count-badge">0</span>
           </button>
+          <button type="button" class="admin-subnav-btn" data-admin-tab="fulfillment">
+            Fulfillment Queue <span id="pendingFulfillmentBadge" class="tab-count-badge">0</span>
+          </button>
           <button type="button" class="admin-subnav-btn" data-admin-tab="pts-manager">
             Direct PTS Manager
           </button>
@@ -483,7 +532,37 @@
           </div>
         </div>
 
-        <!-- Tab Section 2: Direct PTS Manager -->
+        <!-- Tab Section 2: Fulfillment Queue -->
+        <div id="adminTabFulfillment" class="admin-sub-content" style="display: none;">
+          <div class="card admin-table-card">
+            <div class="admin-filter-bar">
+              <span class="filter-label">Filter:</span>
+              <button type="button" class="ful-filter-btn active" data-ful-filter="PENDING">Pending Delivery</button>
+              <button type="button" class="ful-filter-btn" data-ful-filter="ALL">All Items</button>
+            </div>
+            <div class="table-wrap">
+              <table class="leaderboard-table admin-table">
+                <thead>
+                  <tr>
+                    <th style="width: 70px;">ID</th>
+                    <th style="min-width: 170px;">Tester</th>
+                    <th style="min-width: 180px;">Item</th>
+                    <th style="width: 120px;">Category</th>
+                    <th style="width: 90px;">Cost</th>
+                    <th style="width: 140px;">Status</th>
+                    <th style="min-width: 160px;">Purchased</th>
+                    <th style="min-width: 190px; text-align: right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="adminFulfillmentTbody">
+                  <tr><td colspan="8" class="table-loading">Loading fulfillment queue...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab Section 3: Direct PTS Manager -->
         <div id="adminTabPtsManager" class="admin-sub-content" style="display: none;">
           <div class="card pts-manager-card">
             <header class="card-header">

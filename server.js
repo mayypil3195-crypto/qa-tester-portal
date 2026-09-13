@@ -1077,12 +1077,20 @@ app.post('/api/shop/buy', requireAuth, async (req, res) => {
     // Atomically deduct balance
     const updatedUser = db.updateBalance(user.discord_id, -item.price);
 
-    // Record purchase in database
+    // Record purchase in database & insert into player inventory
     db.recordPurchase({
       discord_id: user.discord_id,
       item_id: item.id,
       item_name: item.name,
       cost: item.price
+    });
+
+    db.addInventoryItem({
+      discord_id: user.discord_id,
+      item_id: item.id,
+      item_name: item.name,
+      category: item.category,
+      price_pts: item.price
     });
 
     // Fire Discord notification
@@ -1464,6 +1472,137 @@ app.get('/api/admin/logs', requireLeadTester, (req, res) => {
   } catch (error) {
     console.error('[Admin Logs Error]:', error);
     res.status(500).json({ success: false, error: 'Failed to retrieve audit logs.' });
+  }
+});
+
+// ---------------- PLAYER INVENTORY & FULFILLMENT APIS ----------------
+
+/**
+ * Get current user's inventory
+ */
+app.get('/api/inventory/me', requireAuth, (req, res) => {
+  try {
+    const items = db.getUserInventory(req.session.user.id);
+    res.json({
+      success: true,
+      inventory: items
+    });
+  } catch (error) {
+    console.error('[Get Inventory Error]:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve inventory.' });
+  }
+});
+
+/**
+ * Lead QA: Fetch all tester purchases for fulfillment queue
+ */
+app.get('/api/admin/inventory', requireLeadTester, (req, res) => {
+  try {
+    const status = req.query.status || 'ALL';
+    const items = db.getAllInventory(status);
+    res.json({
+      success: true,
+      inventory: items
+    });
+  } catch (error) {
+    console.error('[Admin Inventory Error]:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve fulfillment queue.' });
+  }
+});
+
+/**
+ * Lead QA: Fulfill an inventory item (delivered in-game)
+ */
+app.post('/api/admin/inventory/:id/fulfill', requireLeadTester, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const leadUser = req.session.user;
+    const item = db.getInventoryById(id);
+
+    if (!item) {
+      return res.status(404).json({ success: false, error: 'Inventory item not found.' });
+    }
+
+    if (item.status === 'FULFILLED') {
+      return res.status(400).json({ success: false, error: 'Item has already been marked as fulfilled.' });
+    }
+
+    db.fulfillInventoryItem(id, leadUser.id);
+
+    // Create audit log
+    db.createAuditLog({
+      action_type: 'ITEM_FULFILL',
+      actor_id: leadUser.id,
+      actor_name: leadUser.username,
+      target_id: item.discord_id,
+      target_name: item.username || item.discord_id,
+      details: `Delivered ${item.item_name} (ID #${id}) in-game`,
+      delta_pts: 0
+    });
+
+    // Dispatch Discord Webhook embed to DISCORD_LOGS_WEBHOOK_URL
+    const embed = {
+      title: '📦 Item Delivered In-Game',
+      color: 0x2ECC71, // Emerald
+      fields: [
+        { name: 'Item', value: `${item.item_name} (${item.category})`, inline: true },
+        { name: 'Recipient', value: `<@${item.discord_id}>`, inline: true },
+        { name: 'Fulfilled By', value: `${leadUser.username} (<@${leadUser.id}>)`, inline: true },
+        { name: 'Purchase ID', value: `#${item.id}`, inline: true },
+        { name: 'Cost', value: `${item.price_pts} PTS`, inline: true }
+      ],
+      footer: {
+        text: `Lead ID: ${leadUser.id} • User ID: ${item.discord_id}`
+      },
+      timestamp: new Date().toISOString()
+    };
+
+    sendLogWebhook({ embeds: [embed] }).catch(err => {
+      console.error('[Async Fulfill Webhook Error]:', err);
+    });
+
+    return res.json({
+      success: true,
+      message: `Item #${id} (${item.item_name}) marked as delivered in-game!`
+    });
+  } catch (error) {
+    console.error('[Fulfill Inventory Error]:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fulfill item.' });
+  }
+});
+
+/**
+ * Lead QA: Delete / revoke an inventory item
+ */
+app.post('/api/admin/inventory/:id/delete', requireLeadTester, (req, res) => {
+  try {
+    const { id } = req.params;
+    const leadUser = req.session.user;
+    const item = db.getInventoryById(id);
+
+    if (!item) {
+      return res.status(404).json({ success: false, error: 'Inventory item not found.' });
+    }
+
+    db.deleteInventoryItem(id);
+
+    db.createAuditLog({
+      action_type: 'ITEM_REVOKE',
+      actor_id: leadUser.id,
+      actor_name: leadUser.username,
+      target_id: item.discord_id,
+      target_name: item.username || item.discord_id,
+      details: `Revoked/deleted ${item.item_name} (ID #${id}) from inventory`,
+      delta_pts: 0
+    });
+
+    return res.json({
+      success: true,
+      message: `Item #${id} (${item.item_name}) removed from inventory.`
+    });
+  } catch (error) {
+    console.error('[Delete Inventory Error]:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to delete item.' });
   }
 });
 
