@@ -1318,7 +1318,8 @@ const SHOP_CATALOG = {
     category: 'Units',
     badge: 'Rare Tier',
     desc: 'Guaranteed Rare tier unit delivered directly to your roster.',
-    icon: '⚔️'
+    icon: '⚔️',
+    image: '/assets/rarebgg.png'
   },
   'unit-epic': {
     id: 'unit-epic',
@@ -1327,7 +1328,8 @@ const SHOP_CATALOG = {
     category: 'Units',
     badge: 'Epic Tier',
     desc: 'High-impact Epic tier unit featuring advanced skill sets.',
-    icon: '🛡️'
+    icon: '🛡️',
+    image: '/assets/epicbgg.png'
   },
   'unit-legendary': {
     id: 'unit-legendary',
@@ -1336,7 +1338,8 @@ const SHOP_CATALOG = {
     category: 'Units',
     badge: 'Legendary Tier',
     desc: 'Premier Legendary champion with battlefield-altering power.',
-    icon: '👑'
+    icon: '👑',
+    image: '/assets/legbgg.png'
   },
   'unit-mythic': {
     id: 'unit-mythic',
@@ -1345,7 +1348,8 @@ const SHOP_CATALOG = {
     category: 'Units',
     badge: 'Mythic Tier',
     desc: 'Extremely rare Mythic powerhouse with supreme combat scaling.',
-    icon: '⚡'
+    icon: '⚡',
+    image: '/assets/mythicbgg.png'
   },
   'unit-secret': {
     id: 'unit-secret',
@@ -1354,7 +1358,8 @@ const SHOP_CATALOG = {
     category: 'Units',
     badge: 'Secret Tier',
     desc: 'The ultimate hidden exclusive unit reserved for elite testers.',
-    icon: '🌟'
+    icon: '🌟',
+    image: '/assets/secretbgg.png'
   },
 
   // Robux & Bundles Conversion

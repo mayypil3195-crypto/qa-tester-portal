@@ -352,18 +352,28 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    shopGrid.innerHTML = filtered.map(item => `
-      <div class="card shop-card shop-item-card" data-category="${item.category}">
-        ${item.image ? `
+    shopGrid.innerHTML = filtered.map(item => {
+      let artHtml = '';
+      if (item.category === 'Units' && item.image) {
+        artHtml = `<img src="${item.image}" alt="${item.name}" class="shop-item-img unit-preview-frame" loading="lazy" />`;
+      } else if (item.image) {
+        artHtml = `
           <img src="${item.image}" alt="${item.name}" class="shop-item-img" loading="lazy" onerror="this.onerror=null; this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
           <div class="shop-art-slot" style="display: none;">
             <span class="shop-art-icon">${item.icon || '📦'}</span>
           </div>
-        ` : `
+        `;
+      } else {
+        artHtml = `
           <div class="shop-art-slot">
             <span class="shop-art-icon">${item.icon || '📦'}</span>
           </div>
-        `}
+        `;
+      }
+
+      return `
+      <div class="card shop-card shop-item-card" data-category="${item.category}">
+        ${artHtml}
         <div class="shop-item-header">
           <h3 class="shop-item-name">${item.name}</h3>
           <span class="shop-badge ${getBadgeClass(item)}">${item.badge || item.category}</span>
@@ -374,7 +384,8 @@ document.addEventListener('DOMContentLoaded', () => {
           <button type="button" class="btn-buy" data-item-id="${item.id}" data-price="${item.price}">Purchase</button>
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
 
     // Attach purchase listeners to dynamic buttons
     shopGrid.querySelectorAll('.btn-buy').forEach(btn => {

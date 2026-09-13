@@ -631,6 +631,14 @@ body {
   filter: drop-shadow(0 4px 12px rgba(255, 255, 255, 0.1));
 }
 
+.unit-preview-frame,
+.shop-item-img.unit-preview-frame {
+  object-fit: cover;
+  border-radius: 8px;
+  padding: 0;
+  background: #0a0d16;
+}
+
 /* Dedicated Placeholder Art Slot */
 .shop-art-slot {
   width: 100%;
