@@ -9,6 +9,12 @@ const PORT = process.env.PORT || 3000;
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL ? process.env.DISCORD_WEBHOOK_URL.trim() : '';
 const DISCORD_LOGS_WEBHOOK_URL = process.env.DISCORD_LOGS_WEBHOOK_URL ? process.env.DISCORD_LOGS_WEBHOOK_URL.trim() : '';
 
+// Lead QA Tester Target Role ID (Defaults to role 1533076808902119495)
+const LEAD_ROLE_ID = (process.env.LEAD_ROLE_ID || process.env.LEAD_TESTER_ROLE_ID || '1533076808902119495').trim();
+
+// In-memory cache for Discord member roles to mitigate API rate limits (5-min TTL)
+const memberRoleCache = new Map();
+
 // Trust reverse proxy (Railway, Heroku, etc.)
 app.set('trust proxy', 1);
 
@@ -59,6 +65,52 @@ function requireLeadTester(req, res, next) {
     });
   }
   next();
+}
+
+/**
+ * Check if a Discord member possesses the Lead QA Tester role (LEAD_ROLE_ID).
+ * Returns true if the user holds the role, false otherwise.
+ * Automatically synchronizes status to SQLite (db.setUserLeadStatus).
+ */
+async function checkDiscordMemberHasLeadRole(discordId) {
+  if (!discordId) return false;
+  const id = String(discordId).trim();
+  const now = Date.now();
+
+  const cached = memberRoleCache.get(id);
+  if (cached && cached.expiresAt > now) {
+    return cached.hasLeadRole;
+  }
+
+  const botToken = process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN;
+  const guildId = process.env.DISCORD_GUILD_ID || process.env.GUILD_ID;
+
+  if (botToken && guildId) {
+    try {
+      const res = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${id}`, {
+        headers: { Authorization: `Bot ${botToken}` }
+      });
+      if (res.ok) {
+        const member = await res.json();
+        const memberRoles = Array.isArray(member.roles) ? member.roles : [];
+        const hasLeadRole = memberRoles.includes(LEAD_ROLE_ID);
+        memberRoleCache.set(id, { hasLeadRole, expiresAt: now + 5 * 60 * 1000 });
+        db.setUserLeadStatus(id, hasLeadRole);
+        return hasLeadRole;
+      } else if (res.status === 404) {
+        memberRoleCache.set(id, { hasLeadRole: false, expiresAt: now + 5 * 60 * 1000 });
+        db.setUserLeadStatus(id, false);
+        return false;
+      }
+    } catch (err) {
+      console.warn(`[Discord Member Check Error for ${id}]:`, err.message);
+    }
+  }
+
+  // Fallback to SQLite status if Discord API is unreachable / unconfigured
+  const existing = db.getUser(id);
+  const isLead = Boolean(existing && existing.is_lead_tester);
+  return isLead;
 }
 
 /**
@@ -469,11 +521,11 @@ app.get('/auth/discord/callback', async (req, res) => {
       }
 
       const memberData = await memberResponse.json();
-      const memberRoles = memberData.roles || [];
-      const leadRoleId = process.env.LEAD_TESTER_ROLE_ID;
-      if (leadRoleId && memberRoles.includes(leadRoleId)) {
+      const memberRoles = Array.isArray(memberData.roles) ? memberData.roles : [];
+      if (memberRoles.includes(LEAD_ROLE_ID)) {
         isLeadTester = true;
       }
+      memberRoleCache.set(userData.id, { hasLeadRole: isLeadTester, expiresAt: Date.now() + 5 * 60 * 1000 });
     }
 
     // 4. Authenticated & Verified: Upsert User & Establish Session
@@ -489,6 +541,8 @@ app.get('/auth/discord/callback', async (req, res) => {
       avatar: avatarUrl,
       is_lead_tester: isLeadTester
     });
+
+    db.setUserLeadStatus(userData.id, isLeadTester);
 
     req.session.user = {
       id: userData.id,
@@ -523,19 +577,23 @@ if (process.env.ALLOW_DEV_LOGIN === 'true' || process.env.NODE_ENV === 'test') {
     const discord_id = req.query.discord_id || '1546968192264568883';
     const username = req.query.username || 'Test_QA_User';
     const avatar = req.query.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
-    const isLeadTester = req.query.is_lead === 'true' || req.query.lead === 'true';
+    const rolesParam = req.query.roles ? req.query.roles.split(',') : [];
+    const hasLeadRole = req.query.is_lead === 'true' || req.query.lead === 'true' || rolesParam.includes(LEAD_ROLE_ID);
 
     const dbUser = db.upsertUser({ 
       discord_id, 
       username, 
       avatar,
-      is_lead_tester: isLeadTester
+      is_lead_tester: hasLeadRole
     });
+    db.setUserLeadStatus(discord_id, hasLeadRole);
+    memberRoleCache.set(discord_id, { hasLeadRole, expiresAt: Date.now() + 5 * 60 * 1000 });
+
     req.session.user = {
       id: dbUser.discord_id,
       username: dbUser.username,
       avatar: dbUser.avatar,
-      isLeadTester
+      isLeadTester: hasLeadRole
     };
     res.redirect('/');
   });
@@ -566,19 +624,19 @@ app.get('/api/me', async (req, res) => {
   // Refresh role verification with Discord API if available
   const botToken = process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN;
   const guildId = process.env.DISCORD_GUILD_ID || process.env.GUILD_ID;
-  const leadRoleId = process.env.LEAD_TESTER_ROLE_ID;
 
-  if (botToken && guildId && leadRoleId && req.session.user.id) {
+  if (botToken && guildId && req.session.user.id) {
     try {
       const memberRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${req.session.user.id}`, {
         headers: { Authorization: `Bot ${botToken}` }
       });
       if (memberRes.ok) {
         const memberData = await memberRes.json();
-        const memberRoles = memberData.roles || [];
-        const isLead = memberRoles.includes(leadRoleId);
+        const memberRoles = Array.isArray(memberData.roles) ? memberData.roles : [];
+        const isLead = memberRoles.includes(LEAD_ROLE_ID);
         req.session.user.isLeadTester = isLead;
         db.setUserLeadStatus(req.session.user.id, isLead);
+        memberRoleCache.set(req.session.user.id, { hasLeadRole: isLead, expiresAt: Date.now() + 5 * 60 * 1000 });
       }
     } catch (err) {
       console.warn('[Role Refresh Error]:', err.message);
@@ -1137,8 +1195,9 @@ app.post('/api/shop/buy', requireAuth, async (req, res) => {
 
 /**
  * Leaderboard Ranking Endpoint
+ * Dynamically excludes users possessing the Lead QA role (LEAD_ROLE_ID: 1533076808902119495)
  */
-app.get('/api/leaderboard', (req, res) => {
+app.get('/api/leaderboard', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit, 10) || 20;
 
@@ -1157,6 +1216,29 @@ app.get('/api/leaderboard', (req, res) => {
     if (req.session && req.session.user && req.session.user.isLeadTester) {
       excludedIds.add(req.session.user.id);
       db.setUserLeadStatus(req.session.user.id, true);
+    }
+
+    // 3. Inspect top candidates to dynamically verify and filter any leads via Discord API
+    const botToken = process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN;
+    const guildId = process.env.DISCORD_GUILD_ID || process.env.GUILD_ID;
+    if (botToken && guildId) {
+      const topCandidates = db.db.prepare(`
+        SELECT discord_id, is_lead_tester
+        FROM users
+        ORDER BY balance_pts DESC, created_at ASC
+        LIMIT ?
+      `).all(limit + 20);
+
+      for (const candidate of topCandidates) {
+        if (candidate.is_lead_tester === 1 || excludedIds.has(candidate.discord_id)) {
+          excludedIds.add(candidate.discord_id);
+          continue;
+        }
+        const isLead = await checkDiscordMemberHasLeadRole(candidate.discord_id);
+        if (isLead) {
+          excludedIds.add(candidate.discord_id);
+        }
+      }
     }
 
     const leaderboard = db.getLeaderboard(limit, Array.from(excludedIds));
@@ -1697,4 +1779,13 @@ function handleShutdown(signal) {
 process.on('SIGINT', () => handleShutdown('SIGINT'));
 process.on('SIGTERM', () => handleShutdown('SIGTERM'));
 
-module.exports = { app, server, sendLogWebhook, logCasinoActivity, dispatchDiscordWebhook };
+module.exports = { 
+  app, 
+  server, 
+  sendLogWebhook, 
+  logCasinoActivity, 
+  dispatchDiscordWebhook,
+  checkDiscordMemberHasLeadRole,
+  LEAD_ROLE_ID,
+  memberRoleCache
+};
