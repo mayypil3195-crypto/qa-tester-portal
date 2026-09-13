@@ -1484,20 +1484,30 @@ document.addEventListener('DOMContentLoaded', () => {
     { name: '10 PTS', rarity: 'mil-spec', rarityColor: '#4b69ff', category: 'Mil-Spec', icon: '🪙' },
     { name: '15 PTS', rarity: 'mil-spec', rarityColor: '#4b69ff', category: 'Mil-Spec', icon: '🪙' },
     { name: '25 PTS', rarity: 'mil-spec', rarityColor: '#4b69ff', category: 'Mil-Spec', icon: '🪙' },
-    { name: 'Trait Reroll', rarity: 'restricted', rarityColor: '#8847ff', category: 'Restricted', image: '/assets/reroll.webp' },
+    { name: 'Magical Leaf', rarity: 'restricted', rarityColor: '#8847ff', category: 'Restricted', image: '/assets/magicleaf.webp' },
     { name: 'Stat Crystal', rarity: 'classified', rarityColor: '#d32ce6', category: 'Classified', image: '/assets/stat.webp' },
     { name: 'Modifier Prism', rarity: 'classified', rarityColor: '#d32ce6', category: 'Classified', image: '/assets/modifirer.png' },
-    { name: 'Magical Leaf', rarity: 'covert', rarityColor: '#eb4b4b', category: 'Covert', image: '/assets/magicleaf.webp' },
-    { name: '★ Special Mew Trio / Brainrot Trophy', rarity: 'gold', rarityColor: '#ffd700', category: 'Special Rare', image: '/assets/special_gold.webp' }
+    { name: 'Trait Reroll', rarity: 'covert', rarityColor: '#eb4b4b', category: 'Covert', image: '/assets/reroll.webp' },
+    { name: 'p-chan drool', rarity: 'gold', rarityColor: '#ffd700', category: 'Special Rare', image: '/assets/special_gold.webp' }
   ];
 
   function renderCaseCard(item, isWinner = false) {
+    let mediaHtml = '';
+    if (item.image) {
+      mediaHtml = `<img src="${item.image}" alt="${item.name}" class="case-card-img" />`;
+    } else {
+      mediaHtml = `
+        <svg class="case-card-pts-svg" width="44" height="44" viewBox="0 0 24 24" fill="#fbbf24">
+          <circle cx="12" cy="12" r="10" fill="#f59e0b" stroke="#fcd34d" stroke-width="1.5"/>
+          <text x="12" y="15.5" font-size="9.5" font-weight="900" text-anchor="middle" fill="#0f172a" font-family="system-ui, -apple-system, sans-serif">PTS</text>
+        </svg>
+      `;
+    }
+
     return `
       <div class="case-item-card rarity-${item.rarity} ${isWinner ? 'is-target-card' : ''}">
         <div class="case-card-img-wrap">
-          ${item.image 
-            ? `<img src="${item.image}" alt="${item.name}" class="case-card-img" />` 
-            : `<span class="case-card-icon">${item.icon || '📦'}</span>`}
+          ${mediaHtml}
         </div>
         <div class="case-card-info">
           <div class="case-card-name" title="${item.name}">${item.name}</div>
@@ -1842,13 +1852,29 @@ document.addEventListener('DOMContentLoaded', () => {
             caseResultIcon.style.display = 'none';
           } else {
             caseResultImg.style.display = 'none';
-            caseResultIcon.textContent = winner.icon || '📦';
+            caseResultIcon.innerHTML = `
+              <svg class="pts-icon-lg" width="48" height="48" viewBox="0 0 24 24" fill="#fbbf24">
+                <circle cx="12" cy="12" r="10" fill="#f59e0b" stroke="#fcd34d" stroke-width="1.5"/>
+                <text x="12" y="15.5" font-size="9.5" font-weight="900" text-anchor="middle" fill="#0f172a" font-family="system-ui, -apple-system, sans-serif">PTS</text>
+              </svg>
+            `;
             caseResultIcon.style.display = 'block';
           }
 
           caseResultRarity.textContent = winner.category || winner.rarity;
           caseResultRarity.style.backgroundColor = winner.rarityColor || '#4b69ff';
-          caseResultPoints.textContent = `+${json.rewardPts} PTS (Net: ${json.netChange >= 0 ? '+' : ''}${json.netChange})`;
+
+          if (json.itemAwarded) {
+            caseResultPoints.textContent = `🎁 ITEM UNLOCKED`;
+            caseResultPoints.style.color = '#a855f7';
+          } else if (winner.rarity === 'gold') {
+            caseResultPoints.textContent = `+${json.rewardPts} PTS`;
+            caseResultPoints.style.color = '#ffd700';
+          } else {
+            caseResultPoints.textContent = `+${json.rewardPts} PTS (Net: ${json.netChange >= 0 ? '+' : ''}${json.netChange})`;
+            caseResultPoints.style.color = '#10b981';
+          }
+
           caseResultTitle.textContent = winner.name;
           caseResultMessage.textContent = json.message;
 

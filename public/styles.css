@@ -2110,6 +2110,19 @@ body {
   box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
 }
 
+.pts-icon {
+  display: inline-block;
+  vertical-align: -2px;
+  color: #fbbf24;
+  margin-right: 5px;
+}
+
+.case-card-pts-svg,
+.pts-icon-lg {
+  display: inline-block;
+  filter: drop-shadow(0 2px 6px rgba(245, 158, 11, 0.4));
+}
+
 /* ---------------- VIEW 7: LEAD QA PANEL ---------------- */
 .nav-admin-badge {
   background: rgba(245, 158, 11, 0.2);

@@ -255,13 +255,13 @@ async function sendLogWebhook(payload) {
  * Suppresses all ordinary losses and low-tier payouts.
  * Only fires if the outcome is a high multiplier win (multiplier >= 3 and netChange > 0).
  */
-async function logCasinoActivity({ user, game, bet, multiplier, payout, netChange, newBalance }) {
-  // Suppress loss spam: strictly multiplier >= 3 and positive net payout
-  if (!multiplier || multiplier < 3 || (netChange !== undefined && netChange <= 0)) {
+async function logCasinoActivity({ user, game, bet, multiplier, payout, netChange, newBalance, itemWon, isItemDrop }) {
+  // Suppress loss spam: strictly multiplier >= 3 and positive net payout, unless it's a rare item drop (Covert / Gold)
+  if (!isItemDrop && (!multiplier || multiplier < 3 || (netChange !== undefined && netChange <= 0))) {
     return;
   }
 
-  const isJackpot = (multiplier >= 10);
+  const isJackpot = (multiplier >= 10 || isItemDrop);
   const title = isJackpot ? '🎰 Casino Jackpot Win!' : '🎰 Casino Big Win!';
   const color = 0xFEE75C; // Gold
 
@@ -286,12 +286,12 @@ async function logCasinoActivity({ user, game, bet, multiplier, payout, netChang
       },
       {
         name: 'Outcome',
-        value: `Hit ${multiplier}x | Payout: ${payout} PTS`,
+        value: itemWon && isItemDrop ? `Unboxed [Covert] ${itemWon} (Item Drop)` : `Hit ${multiplier}x | Payout: ${payout} PTS`,
         inline: true
       },
       {
         name: 'Net',
-        value: `+${netChange} PTS`,
+        value: isItemDrop ? `🎁 ${itemWon} (Inventory)` : `+${netChange} PTS`,
         inline: true
       },
       {
@@ -981,15 +981,21 @@ const CASE_ITEMS = [
 
   // Restricted (Purple, ~18%)
   {
-    id: 'restricted_reroll',
-    name: 'Trait Reroll',
+    id: 'restricted_leaf',
+    name: 'Magical Leaf',
     category: 'Restricted',
     rarity: 'restricted',
     rarityColor: '#8847ff',
-    reward: 50,
+    reward: 0,
+    inventoryItem: {
+      id: 'magical-leaf',
+      name: 'Magical Leaf',
+      category: 'Consumables',
+      price: 50
+    },
     weight: 18,
-    icon: '🎲',
-    image: '/assets/reroll.webp'
+    icon: '🍃',
+    image: '/assets/magicleaf.webp'
   },
 
   // Classified (Pink, ~8%)
@@ -1016,23 +1022,29 @@ const CASE_ITEMS = [
     image: '/assets/modifirer.png'
   },
 
-  // Covert (Red, ~3.5%)
+  // Covert (Red, ~3.5%) - Actual Trait Reroll item directly into user inventory (NOT raw PTS!)
   {
-    id: 'covert_leaf',
-    name: 'Magical Leaf',
+    id: 'covert_reroll',
+    name: 'Trait Reroll',
     category: 'Covert',
     rarity: 'covert',
     rarityColor: '#eb4b4b',
-    reward: 250,
+    reward: 0,
+    inventoryItem: {
+      id: 'trait-reroll',
+      name: 'Trait Reroll',
+      category: 'Consumables',
+      price: 50
+    },
     weight: 3.5,
-    icon: '🍃',
-    image: '/assets/magicleaf.webp'
+    icon: '🎲',
+    image: '/assets/reroll.webp'
   },
 
-  // Special Rare (Gold ★, ~0.5%)
+  // Special Rare (Gold ★, ~0.5%) - p-chan drool
   {
-    id: 'special_gold_mew',
-    name: '★ Special Mew Trio / Brainrot Trophy',
+    id: 'special_gold_pchan',
+    name: 'p-chan drool',
     category: 'Special Rare',
     rarity: 'gold',
     rarityColor: '#ffd700',
@@ -1103,8 +1115,37 @@ async function handleCaseOpening(req, res) {
       ? module.exports.generateCaseTape(winner, winningIndex, 50)
       : generateCaseTape(winner, winningIndex, 50);
 
-    // Credit reward PTS
-    db.updateBalance(user.discord_id, winner.reward);
+    // Credit reward PTS only if > 0 (item drops do not credit raw balance)
+    if (winner.reward > 0) {
+      db.updateBalance(user.discord_id, winner.reward);
+    }
+
+    // If winner grants an item directly into user inventory (e.g. Trait Reroll, Magical Leaf):
+    let itemAwarded = null;
+    if (winner.inventoryItem) {
+      try {
+        db.addInventoryItem({
+          discord_id: user.discord_id,
+          item_id: winner.inventoryItem.id,
+          item_name: winner.inventoryItem.name,
+          category: winner.inventoryItem.category || 'Consumables',
+          price_pts: winner.inventoryItem.price || 0
+        });
+        itemAwarded = winner.inventoryItem.name;
+
+        db.createAuditLog({
+          action_type: 'CASE_ITEM_DROP',
+          actor_id: user.discord_id,
+          actor_name: user.username,
+          target_id: user.discord_id,
+          target_name: user.username,
+          details: `Unboxed [${winner.category}] ${winner.name}! Queued to inventory.`,
+          delta_pts: winner.reward || 0
+        });
+      } catch (itemErr) {
+        console.error('[Case Opening Item Error]:', itemErr);
+      }
+    }
 
     // If Gold ★ Special Rare: award exclusive bundle directly to user inventory/fulfillment queue
     let bundleAwarded = null;
@@ -1131,7 +1172,7 @@ async function handleCaseOpening(req, res) {
           actor_name: user.username,
           target_id: user.discord_id,
           target_name: user.username,
-          details: `Unboxed ★ Special Mew Trio! Awarded 1,000 PTS + ${bundle.name} to inventory queue.`,
+          details: `Unboxed p-chan drool! Awarded 1,000 PTS + ${bundle.name} to inventory queue.`,
           delta_pts: winner.reward
         });
       } catch (invErr) {
@@ -1152,11 +1193,22 @@ async function handleCaseOpening(req, res) {
         user,
         game: 'ASX Case Opener',
         bet: cost,
-        multiplier: Number((winner.reward / cost).toFixed(2)),
+        multiplier: winner.reward > 0 ? Number((winner.reward / cost).toFixed(2)) : 0,
         payout: winner.reward,
         netChange,
-        newBalance: updatedUser.balance_pts
+        newBalance: updatedUser.balance_pts,
+        itemWon: winner.name,
+        isItemDrop: !!winner.inventoryItem
       }).catch(err => console.error('[Case Webhook Error]:', err));
+    }
+
+    let messageText = '';
+    if (winner.rarity === 'gold') {
+      messageText = `🌟 JACKPOT! You unboxed ${winner.name}! (+${winner.reward} PTS & ${bundleAwarded || 'Tester Mega Bundle'} queued to Inventory, Net: +${netChange} PTS)`;
+    } else if (itemAwarded) {
+      messageText = `Unboxed [${winner.category}] ${winner.name}! Added directly to your Inventory queue.`;
+    } else {
+      messageText = `Unboxed [${winner.category}] ${winner.name}! (+${winner.reward} PTS, Net: ${netChange >= 0 ? '+' : ''}${netChange} PTS)`;
     }
 
     return res.json({
@@ -1168,10 +1220,9 @@ async function handleCaseOpening(req, res) {
       rewardPts: winner.reward,
       netChange,
       newBalance: updatedUser.balance_pts,
+      itemAwarded,
       bundleAwarded,
-      message: winner.rarity === 'gold'
-        ? `🌟 JACKPOT! You unboxed ${winner.name}! (+${winner.reward} PTS & ${bundleAwarded || 'Tester Mega Bundle'} queued to Inventory, Net: +${netChange} PTS)`
-        : `Unboxed [${winner.category}] ${winner.name}! (+${winner.reward} PTS, Net: ${netChange >= 0 ? '+' : ''}${netChange} PTS)`
+      message: messageText
     });
   } catch (error) {
     console.error('[Case Opening Error]:', error);
